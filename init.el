@@ -4,6 +4,7 @@
 
 (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
 
+
 (load "multiple-cursors")
 (load "python-stuff")
 
@@ -17,17 +18,24 @@
 )
 
 (add-hook 'prog-mode-hook #'mortal-mode)
-
-(tool-bar-mode -1)
 (add-hook 'prog-mode-hook #'display-line-numbers-mode)
-(delete-selection-mode 1)
-(tab-bar-mode 1)
 
+
+;; cursor style
 (blink-cursor-mode 1)
 (setq blink-cursor-blinks 0)
 (setq-default cursor-type '(bar . 2))
 
-(desktop-save-mode 1)
 
+;; ui modes
+(tab-bar-mode 1)
+(desktop-save-mode 1)
+(tool-bar-mode -1)
+
+
+;; editing modes
+(delete-selection-mode 1)
+
+;; nobody needs those
 (setq-default make-backup-files nil)
 (setq-default auto-save-default nil)

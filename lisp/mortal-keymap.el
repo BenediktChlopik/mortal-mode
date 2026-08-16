@@ -1,13 +1,5 @@
 ;; -*- lexical-binding: t; -*-
 
-(defun mortal/kill-region-and-yank ()
-  "If a region is active, delete it, then yank the kill-ring text."
-  (interactive)
-  (when (use-region-p)
-    (delete-region (region-beginning) (region-end)))
-  (yank))
-
-
 (defun mortal/save-and-close-file ()
   "Save the current buffer, and close the window."
   (interactive)
@@ -27,17 +19,42 @@ be prompted for a filename the first time you save it."
     buffer))
 
 
-(defun mortal/forward-word ()
-  "Skip over whitespace. If there was none to skip, move past the word."
+(defun mortal/copy-line-or-region ()
+  "Copy the active region to the kill ring, or the whole current
+line if no region is active. Point is moved to the start of the
+line afterward."
   (interactive)
-  (forward-same-syntax)
-  (skip-chars-forward " \t\r"))
+  (if (use-region-p)
+      (copy-region-as-kill (region-beginning) (region-end))
+    (copy-region-as-kill (line-beginning-position) (line-end-position)))
+  (beginning-of-line))
+
+
+(defun mortal/forward-word ()
+  "Skip over whitespace and move past the following word.
+If a newline is crossed while skipping whitespace, cross it, then
+skip over any leading whitespace on the next line, and stop there
+without moving into the following word."
+  (interactive)
+  (skip-chars-forward " \t\r")
+  (if (eq (char-after) ?\n)
+      (progn
+        (forward-char 1)
+        (skip-chars-forward " \t\r"))
+    (forward-same-syntax))) 
 
 (defun mortal/backward-word ()
-  "Skip over whitespace. If there was none to skip, move past the word."
+  "Skip over whitespace and move past the previous word (backward).
+If a newline is crossed while skipping whitespace, cross it, then
+skip over any trailing whitespace at the end of the previous line,
+and stop there without moving into the preceding word."
   (interactive)
-  (forward-same-syntax -1)
-  (skip-chars-backward " \t\r"))
+  (skip-chars-backward " \t\r")
+  (if (eq (char-before) ?\n)
+      (progn
+        (backward-char 1)
+        (skip-chars-backward " \t\r"))
+    (forward-same-syntax -1)))
 
 
 (defun mortal/backward-delete-word ()
@@ -108,13 +125,12 @@ lines afterwards so the region stays selected for repeated calls."
   (interactive)
   (delete-region (line-beginning-position) (1+ (line-end-position))))
 
-(defun mortal/kill-region-if-active ()
-  "Kill the region, but only if it is actually active.
-Unlike `kill-region' called interactively, this refuses to act
-on a stale/inactive mark."
+(defun mortal/kill-line-or-region ()
+  "Kill the active region, or the whole current line if no region is active."
   (interactive)
   (if (use-region-p)
-      (kill-region (region-beginning) (region-end))))
+      (kill-region (region-beginning) (region-end))
+    (kill-region (line-beginning-position) (line-beginning-position 2))))
 
 
 (defun mortal/insert-line-below ()
@@ -133,6 +149,83 @@ on a stale/inactive mark."
   (indent-according-to-mode))
 
 
+(defun mortal/isearch-forward-or-yank-region ()
+  "Start `isearch-forward'. If a region is active, prefill the
+search string with its contents; otherwise start isearch normally."
+  (interactive)
+  (if (use-region-p)
+      (let ((string (buffer-substring-no-properties
+                     (region-beginning) (region-end))))
+        (deactivate-mark)
+        (isearch-forward nil 1)
+        (isearch-yank-string string))
+    (isearch-forward)))
+
+(defun mortal/query-replace-or-yank-region ()
+  "Run `query-replace'. If a region is active, use its contents as
+the search string and only prompt for the replacement; otherwise
+start `query-replace' normally."
+  (interactive)
+  (if (use-region-p)
+      (let* ((from (buffer-substring-no-properties
+                    (region-beginning) (region-end)))
+             (to (query-replace-read-to from "Query replace" nil)))
+        (deactivate-mark)
+        (query-replace from to))
+    (call-interactively #'query-replace)))
+
+
+(defvar mortal/selection-commands
+  '(mortal/select-word-right
+    mortal/select-word-left
+    mortal/select-char-right
+    mortal/select-char-left
+    mark-whole-buffer)
+  "Commands that are allowed to extend the region without clearing it.")
+
+(defun mortal/select-word-right ()
+  "Start the region if none is active, then extend it forward using `mortal/forward-word'."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (mortal/forward-word))
+
+(defun mortal/select-word-left ()
+  "Start the region if none is active, then extend it backward using `mortal/backward-word'."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (mortal/backward-word))
+
+(defun mortal/select-char-right ()
+  "Start the region if none is active, then extend it forward by one char."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (forward-char 1))
+
+(defun mortal/select-char-left ()
+  "Start the region if none is active, then extend it backward by one char."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (backward-char 1))
+
+(defun mortal/deactivate-mark-unless-selecting ()
+  "Deactivate the region unless the just-run command was one that
+extends selection, or a mouse-drag/mouse-selection command."
+  (unless (or (memq this-command mortal/selection-commands)
+              (mouse-event-p last-command-event)
+              (memq this-command '(mouse-save-then-kill
+                                    mouse-set-region
+                                    mouse-drag-region
+                                    mouse-set-point)))
+    (deactivate-mark)))
+
+(add-hook 'post-command-hook #'mortal/deactivate-mark-unless-selecting)
+
+
+
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "<escape>") (kbd "C-g"))
@@ -148,16 +241,47 @@ on a stale/inactive mark."
     (define-key map (kbd "<f2> 3") 'split-window-below)
     
     (define-key map (kbd "<f2> <left>") 'windmove-left)
-    (define-key map (kbd "<f2> <right>") 'other-right)
+    (define-key map (kbd "<f2> <right>") 'windmove-right)
     (define-key map (kbd "<f2> <up>") 'windmove-up)
     (define-key map (kbd "<f2> <down>") 'windmove-down)
 
+    ;; tab management 
+    (dotimes (i 9)
+      (let ((n (1+ i)))
+	(define-key map (kbd (format "C-%d" n))
+		    (lambda () (interactive) (tab-bar-select-tab n)))))
+
     ;; select
     (define-key map (kbd "C-a") 'mark-whole-buffer)
+    (define-key map (kbd "C-S-<right>") #'mortal/select-word-right)
+    (define-key map (kbd "C-S-<left>") #'mortal/select-word-left)
+    (define-key map (kbd "C-S-<right>") #'mortal/select-word-right)
+    (define-key map (kbd "C-S-<left>") #'mortal/select-word-left)
+    (define-key map (kbd "S-<right>") #'mortal/select-char-right)
+    (define-key map (kbd "S-<left>") #'mortal/select-char-left)
 
     ;; movement
     (define-key map (kbd "C-<left>") 'mortal/backward-word)
     (define-key map (kbd "C-<right>") 'mortal/forward-word)
+    (define-key map (kbd "C-w") 'goto-line)
+    
+    ;; evil mode
+    (define-key map (kbd "M-h") 'backward-char)
+    (define-key map (kbd "M-j") 'next-line)
+    (define-key map (kbd "M-k") 'previous-line)
+    (define-key map (kbd "M-l") 'forward-char)
+
+    (define-key map (kbd "M-C-h") 'mortal/backward-word)
+    (define-key map (kbd "M-C-l") 'mortal/forward-word)
+    
+    ;; emacs movement
+    (define-key map (kbd "M-p") 'previous-line)
+    (define-key map (kbd "M-n") 'next-line)
+    (define-key map (kbd "M-f") 'forward-char)
+    (define-key map (kbd "M-b") 'backward-char)
+
+    (define-key map (kbd "M-C-f") 'mortal/backward-word)
+    (define-key map (kbd "M-C-b") 'mortal/forward-word)
 
     ;; move line
     (define-key map (kbd "M-<up>") 'mortal/move-line-up)    
@@ -169,9 +293,9 @@ on a stale/inactive mark."
     (define-key map (kbd "C-S-k") 'mortal/delete-line)
 
     ;; clipboard
-    (define-key map (kbd "C-x") 'mortal/kill-region-if-active)
-    (define-key map (kbd "C-c") 'kill-ring-save)
-    (define-key map (kbd "C-v") 'mortal/kill-region-and-yank)
+    (define-key map (kbd "C-x") 'mortal/kill-line-or-region)
+    (define-key map (kbd "C-c") 'mortal/copy-line-or-region)
+    (define-key map (kbd "C-v") 'yank)
 
     ;; file actions
     (define-key map (kbd "C-s") 'save-buffer)
@@ -188,29 +312,10 @@ on a stale/inactive mark."
     (define-key map (kbd "C-<return>") 'mortal/insert-line-below)
     (define-key map (kbd "C-S-<return>") 'mortal/insert-line-above)
 
-    ;; tab management
-    ; C-<tab> already bound to switching between tabs
-    (dotimes (i 9)
-      (let ((n (1+ i)))
-	(define-key map (kbd (format "<f2>-%d" n))
-			(lambda () (interactive) (tab-bar-select-tab n)))))
-
     ;; search / replace
-    ; search should feel like in kate, add directory search
-    (define-key map (kbd "C-f") 'isearch-forward)
-    (define-key map (kbd "C-r") 'query-replace)
-
-    ;; evil mode
-    (define-key map (kbd "M-h") 'backward-char)
-    (define-key map (kbd "M-j") 'next-line)
-    (define-key map (kbd "M-k") 'previous-line)
-    (define-key map (kbd "M-l") 'forward-char)
-
-    ;; emacs movement
-    (define-key map (kbd "M-p") 'previous-line)
-    (define-key map (kbd "M-n") 'next-line)
-    (define-key map (kbd "M-f") 'forward-char)
-    (define-key map (kbd "M-b") 'backward-char)
+    ; add directory search
+    (define-key map (kbd "C-f") 'mortal/isearch-forward-or-yank-region)
+    (define-key map (kbd "C-r") 'mortal/query-replace-or-yank-region)
     
     map))
 
