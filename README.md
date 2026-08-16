@@ -2,6 +2,25 @@ A basic Emacs config for people who are used to modern and more cursor focused e
 
 | Key | Description |
 |---|---|
+| `M-<up>` | Move line up |
+| `M-<down>` | Move line down |
+| `C-<delete>` | Delete word forward |
+| `C-<backspace>` | Delete word backward |
+| `C-S-k` | Delete whole line |
+| `C-x` | Cut line/region |
+| `C-c` | Copy line/region |
+| `C-v` | Paste |
+| `C-s` | Save file |
+| `C-w` | Save and close |
+| `C-n` | New file |
+| `C-o` | Open file browser |
+| `C-z` | Undo |
+| `C-y` | Redo |
+| `C-S-z` | Redo |
+| `C-<return>` | Insert line below |
+| `C-S-<return>` | Insert line above |
+| `C-f` | Search forward |
+| `C-r` | Query replace |
 | `<escape>` | Cancel/quit |
 | `<f1>` | C-x prefix |
 | `<f3>` | C-x r prefix |
@@ -38,22 +57,3 @@ A basic Emacs config for people who are used to modern and more cursor focused e
 | `M-b` | Move char left |
 | `M-C-f` | Move word left |
 | `M-C-b` | Move word right |
-| `M-<up>` | Move line up |
-| `M-<down>` | Move line down |
-| `C-<delete>` | Delete word forward |
-| `C-<backspace>` | Delete word backward |
-| `C-S-k` | Delete whole line |
-| `C-x` | Cut line/region |
-| `C-c` | Copy line/region |
-| `C-v` | Paste |
-| `C-s` | Save file |
-| `C-w` | Save and close |
-| `C-n` | New file |
-| `C-o` | Open file browser |
-| `C-z` | Undo |
-| `C-y` | Redo |
-| `C-S-z` | Redo |
-| `C-<return>` | Insert line below |
-| `C-S-<return>` | Insert line above |
-| `C-f` | Search forward |
-| `C-r` | Query replace |
