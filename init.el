@@ -5,8 +5,8 @@
 (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
 
 
-(load "multiple-cursors")
-(load "python-stuff")
+;(load "lisp/multiple-cursors")
+;(load "python-stuff")
 
 (require 'mortal-keymap)
 

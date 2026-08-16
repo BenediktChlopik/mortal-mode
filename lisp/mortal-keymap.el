@@ -76,27 +76,6 @@ Then delete the next word (without whitespace) as well."
     (delete-region (point) start)))
 
 
-(defun mortal/move-line-up ()
-  "Move the current line up.
-If a region is active, move all marked lines up instead."
-  (interactive)
-  (if (use-region-p)
-      (mortal/move-lines-vertically -1)
-    (progn
-      (transpose-lines 1)
-      (forward-line -2))))
-
-(defun mortal/move-line-down ()
-  "Move the current line down.
-If a region is active, move all marked lines down instead."
-  (interactive)
-  (if (use-region-p)
-      (mortal/move-lines-vertically 1)
-    (progn
-      (forward-line 1)
-      (transpose-lines 1)
-      (forward-line -1))))
-
 (defun mortal/move-lines-vertically (direction)
   "Move the lines spanned by the active region one line vertically.
 DIRECTION is 1 to move down, -1 to move up.  Re-marks the moved
@@ -180,8 +159,35 @@ start `query-replace' normally."
     mortal/select-word-left
     mortal/select-char-right
     mortal/select-char-left
-    mark-whole-buffer)
+    mark-whole-buffer
+    mortal/select-line-up
+    mortal/select-line-down
+    mortal/select-paragraph-up
+    mortal/select-paragraph-down
+    mortal/move-line-up
+    mortal/move-line-down)
   "Commands that are allowed to extend the region without clearing it.")
+
+(defun mortal/move-line-up ()
+  "Move the current line up.
+If a region is active, move all marked lines up instead."
+  (interactive)
+  (if (use-region-p)
+      (mortal/move-lines-vertically -1)
+    (progn
+      (transpose-lines 1)
+      (forward-line -2))))
+
+(defun mortal/move-line-down ()
+  "Move the current line down.
+If a region is active, move all marked lines down instead."
+  (interactive)
+  (if (use-region-p)
+      (mortal/move-lines-vertically 1)
+    (progn
+      (forward-line 1)
+      (transpose-lines 1)
+      (forward-line -1))))
 
 (defun mortal/select-word-right ()
   "Start the region if none is active, then extend it forward using `mortal/forward-word'."
@@ -211,15 +217,47 @@ start `query-replace' normally."
     (push-mark (point) t t))
   (backward-char 1))
 
+(defun mortal/select-line-down ()
+  "Start the region if none is active, then extend it down by one line."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (let ((col (current-column)))
+    (forward-line 1)
+    (move-to-column col)))
+
+(defun mortal/select-line-up ()
+  "Start the region if none is active, then extend it up by one line."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (let ((col (current-column)))
+    (forward-line -1)
+    (move-to-column col)))
+
+(defun mortal/select-paragraph-down ()
+  "Start the region if none is active, then extend it forward by one paragraph."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (forward-paragraph 1))
+
+(defun mortal/select-paragraph-up ()
+  "Start the region if none is active, then extend it backward by one paragraph."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (backward-paragraph 1))
+
 (defun mortal/deactivate-mark-unless-selecting ()
   "Deactivate the region unless the just-run command was one that
 extends selection, or a mouse-drag/mouse-selection command."
   (unless (or (memq this-command mortal/selection-commands)
               (mouse-event-p last-command-event)
               (memq this-command '(mouse-save-then-kill
-                                    mouse-set-region
-                                    mouse-drag-region
-                                    mouse-set-point)))
+                                   mouse-set-region
+                                   mouse-drag-region
+                                   mouse-set-point)))
     (deactivate-mark)))
 
 (add-hook 'post-command-hook #'mortal/deactivate-mark-unless-selecting)
@@ -253,16 +291,24 @@ extends selection, or a mouse-drag/mouse-selection command."
 
     ;; select
     (define-key map (kbd "C-a") 'mark-whole-buffer)
-    (define-key map (kbd "C-S-<right>") #'mortal/select-word-right)
+    
     (define-key map (kbd "C-S-<left>") #'mortal/select-word-left)
     (define-key map (kbd "C-S-<right>") #'mortal/select-word-right)
-    (define-key map (kbd "C-S-<left>") #'mortal/select-word-left)
+
+    (define-key map (kbd "C-S-<up>") #'mortal/select-paragraph-up)
+    (define-key map (kbd "C-S-<down>") #'mortal/select-paragraph-down)
+    
     (define-key map (kbd "S-<right>") #'mortal/select-char-right)
     (define-key map (kbd "S-<left>") #'mortal/select-char-left)
+
+    (define-key map (kbd "S-<up>") #'mortal/select-line-up)
+    (define-key map (kbd "S-<down>") #'mortal/select-line-down)
+
 
     ;; movement
     (define-key map (kbd "C-<left>") 'mortal/backward-word)
     (define-key map (kbd "C-<right>") 'mortal/forward-word)
+    
     (define-key map (kbd "C-w") 'goto-line)
     
     ;; evil mode
@@ -274,6 +320,7 @@ extends selection, or a mouse-drag/mouse-selection command."
     (define-key map (kbd "M-C-h") 'mortal/backward-word)
     (define-key map (kbd "M-C-l") 'mortal/forward-word)
     
+
     ;; emacs movement
     (define-key map (kbd "M-p") 'previous-line)
     (define-key map (kbd "M-n") 'next-line)
