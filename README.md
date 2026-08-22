@@ -6,6 +6,7 @@ A basic Emacs configuration for users accustomed to modern, cursor-focused edito
 # Installation
 ```
 cd ~
+rm .emacs.d/
 git clone https://github.com/BenediktChlopik/mortal-mode.git
 mv mortal-mode .emacs.d/
 ```
