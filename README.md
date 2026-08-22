@@ -1,4 +1,4 @@
-A basic Emacs config for people who are used to modern and more cursor focused editors like Kate, VSCode, Notepad++, Sublime and so many more.
+A basic Emacs configuration for users accustomed to modern, cursor-focused editors like Kate, VS Code, Notepad++, Sublime Text, and many others.
 
 | Key | Description |
 |---|---|
