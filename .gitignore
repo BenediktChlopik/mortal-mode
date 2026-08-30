@@ -1,3 +1,9 @@
 lisp/completion.el
 lisp/multiple-cursors.el
 lisp/python-stuff.el
+.user-lisp-autoloads.el
+auto-save-list
+eln-cache
+places.eld
+.emacs.desktop
+*.elc
