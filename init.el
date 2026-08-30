@@ -21,26 +21,24 @@
 (load-theme 'wombat t)
 
 (custom-set-faces
- '(tab-bar ((t (:inherit header-line))))
- '(tab-bar-tab ((t (:inherit header-line :weight bold :underline t))))
- '(tab-bar-tab-inactive ((t (:inherit header-line-inactive)))))
+ '(tab-line ((t (:inherit header-line))))
+ '(tab-line-tab-current ((t (:inherit header-line :weight bold :underline t))))
+ '(tab-line-tab-inactive ((t (:inherit header-line-inactive)))))
 
 
 ;; imports
-(add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
-
 (require 'mortal-keymap)
-
 
 (define-minor-mode mortal-mode
   "A minor mode for mortal-related keybindings."
   :lighter " Mortal"
   :keymap mortal-map
   :global t
+  (cua-mode (if mortal-mode -1 1))
   )
 
-(mortal-mode)
-;; (add-hook 'prog-mode-hook #'mortal-mode)
+(mortal-mode 1)
+;;(add-hook 'prog-mode-hook #'mortal-mode)
 
 
 ;; cursor style
@@ -48,33 +46,75 @@
 (setq blink-cursor-blinks 0)
 (setq-default cursor-type '(bar . 2))
 
+;; highlight line
+(global-hl-line-mode 1)
+(set-face-attribute 'hl-line nil
+                    :inherit nil
+                    :background "#292929")
 
-;; ui modes
-(tab-bar-mode 1)
+
+;; disable emacs standard ui
 (menu-bar-mode -1)
 (tool-bar-mode -1)
-(scroll-bar-mode -1)
 
+;; other ui modes
+(scroll-bar-mode -1)
+(which-key-mode 1)
 (add-hook 'prog-mode-hook #'display-line-numbers-mode)
 
+;; tab line
+(global-tab-line-mode 1)
+(setq tab-line-close-button-show nil)
 
 ;; save sessions
 (desktop-save-mode 1)
+(save-place-mode 1)
 
 
 ;; editing modes
 (delete-selection-mode 1)
 (setq-default indent-tabs-mode nil)
 (setq-default tab-width 4)
-(setq-local python-indent-offset 4)
+(cua-selection-mode 1)
+(add-hook 'prog-mode-hook #'delete-trailing-whitespace-mode)
+(show-paren-mode 1)
 
-(add-hook 'python-ts-mode-hook
-          (lambda ()
-            (setq-local python-indent-offset 4)
-            (setq-local indent-tabs-mode nil)
-            (setq-local tab-width 4)
-            (add-hook 'before-save-hook
-                      #'delete-trailing-whitespace nil t)))
 
-(add-to-list 'major-mode-remap-alist
-             '(python-mode . python-ts-mode))
+;; electric stuff
+(electric-quote-mode 1)
+(electric-pair-mode 1)
+(electric-layout-mode 1)
+(electric-layout-mode 1)
+(electric-indent-mode 1)
+(setq electric-pair-pairs
+      '((?\( . ?\))
+        (?\[ . ?\])
+        (?\{ . ?\})
+        (?\< . ?\>)))
+
+
+;; completions
+(icomplete-mode 1)
+(setq completion-auto-help 'always)
+(setq completion-preview-minimum-symbol-length 1)
+(global-completion-preview-mode 1)
+
+
+;; scrolling
+(setq scroll-margin 3
+      scroll-conservatively 101
+      scroll-preserve-screen-position t)
+
+
+;; search
+(setq isearch-wrap-pause 'no)
+(setq isearch-wrap-pause nil)
+(setq isearch-lazy-count t)
+(setq isearch-allow-motion t)
+
+
+;; speedbar
+(with-eval-after-load 'speedbar
+  (setq speedbar-window-default-width 30
+        speedbar-window-max-width 30
+        speedbar--window-width 30))
