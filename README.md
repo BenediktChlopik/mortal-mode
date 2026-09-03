@@ -5,6 +5,7 @@ Orange: CTRL
 Green: ALT
 
 # Try it out!
+(on Emacs 31)
 ```
 cd ~
 rm -rf .emacs.d/
