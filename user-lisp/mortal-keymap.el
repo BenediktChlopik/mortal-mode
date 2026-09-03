@@ -69,7 +69,6 @@ If a region is active, move all marked lines down instead."
   (newline-and-indent))
 
 
-
 (require 'delsel)
 (defun mortal/quit ()
   "Quit the current operation or exit the minibuffer."
@@ -85,9 +84,59 @@ If a region is active, move all marked lines down instead."
     (switch-to-buffer buffer)))
 
 
+(require 'treesit)
+
+(defvar-local mortal/treesit-mark-node nil)
+
+(defun mortal/mark-expand ()
+  "Mark the next Tree-sitter parent, or copy the whole buffer."
+  (interactive)
+  (let ((node (or mortal/treesit-mark-node
+                  (treesit-node-at (point) nil t))))
+    (if-let* ((parent (treesit-node-parent node)))
+        (progn
+          (setq mortal/treesit-mark-node parent)
+          (goto-char (treesit-node-start parent))
+          (push-mark (treesit-node-end parent) t t))
+      (kill-new (buffer-substring-no-properties
+                 (point-min) (point-max)))
+      (setq mortal/treesit-mark-node nil)
+      (message "Copied whole buffer"))))
+
+(add-hook 'deactivate-mark-hook
+          (lambda ()
+            (setq mortal/treesit-mark-node nil)))
+
+
+
+(defun mortal/toggle-term ()
+  (interactive)
+  (if-let* ((win (get-buffer-window "*terminal*")))
+      (with-selected-window win
+        (let ((confirm-kill-processes nil))
+          (kill-buffer-and-window)))
+    (let ((win (split-window (window-main-window)
+                             (- (/ (window-total-height) 3))
+                             'below)))
+      (select-window win)
+      (term (or (getenv "SHELL") "/bin/sh"))
+      (tab-line-mode -1)
+      (set-process-query-on-exit-flag
+       (get-buffer-process (current-buffer)) nil))))
+
+
+(defun mortal/tab-line-new-tab-menu ()
+  "Open a new scratch buffer as a tab, then open the buffer menu."
+  (interactive)
+  (switch-to-buffer (generate-new-buffer "*scratch*"))
+  (lisp-interaction-mode)
+  (let* ((posn (list (selected-window) (cons 0 0) (cons 0 0) 0)))
+    (mouse-buffer-menu (list 'mouse-1 posn))))
+
+
+
 
 (require 'tab-line)
-
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
     ;; undefine C-*, M-*, and C-M-* besides C-i, C-j, C-m.
@@ -194,6 +243,7 @@ If a region is active, move all marked lines down instead."
     (define-key map (kbd "M-<left>") #'tab-line-switch-to-prev-tab)
     (define-key map (kbd "M-<right>") #'tab-line-switch-to-next-tab)
     (define-key map (kbd "C-w") #'tab-line-close-tab)
+    (define-key map (kbd "C-b") #'speedbar)
 
     (dotimes (i 9)
       (let ((n (1+ i)))
@@ -204,7 +254,7 @@ If a region is active, move all marked lines down instead."
                       (mortal/tab-line-select-tab n)))))
 
     ;; select
-    (define-key map (kbd "C-a") #'mark-whole-buffer)
+    (define-key map (kbd "C-a") #'mortal/mark-expand)
 
     ;; emacs movement
     (define-key map (kbd "M-p") #'previous-line)
@@ -227,6 +277,7 @@ If a region is active, move all marked lines down instead."
     ;; file actions
     (define-key map (kbd "C-s") #'save-buffer)
     (define-key map (kbd "C-o") #'find-file)
+    (define-key map (kbd "C-n") #'mortal/tab-line-new-tab-menu)
 
     ;; undo / redo
     (define-key map (kbd "C-z") #'undo)
@@ -237,6 +288,9 @@ If a region is active, move all marked lines down instead."
 
     ;; replace
     (define-key map (kbd "C-r") #'query-replace)
+
+    ;; term
+    (define-key map (kbd "C-M-t") #'mortal/toggle-term)
 
 
     map))

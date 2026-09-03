@@ -17,6 +17,23 @@
 (setq-default make-backup-files nil)
 (setq-default auto-save-default nil)
 
+;; mortal mode
+(require 'mortal-keymap)
+
+(define-minor-mode mortal-mode
+  "A minor mode for mortal-related keybindings."
+  :lighter " Mortal"
+  :keymap mortal-map
+  :global t
+  )
+
+(add-to-list 'emulation-mode-map-alists
+             `((mortal-mode . ,mortal-map)))
+
+(mortal-mode 1)
+;;(add-hook 'prog-mode-hook #'mortal-mode)
+
+
 ;; theming
 (load-theme 'wombat t)
 
@@ -26,19 +43,46 @@
  '(tab-line-tab-inactive ((t (:inherit header-line-inactive)))))
 
 
-;; imports
-(require 'mortal-keymap)
+;; completions
+(icomplete-mode 1)
+(setq completion-auto-help 'always)
+(setq completion-preview-minimum-symbol-length 1)
+(global-completion-preview-mode 1)
 
-(define-minor-mode mortal-mode
-  "A minor mode for mortal-related keybindings."
-  :lighter " Mortal"
-  :keymap mortal-map
-  :global t
-  (cua-mode (if mortal-mode -1 1))
-  )
+(require 'treesit)
 
-(mortal-mode 1)
-;;(add-hook 'prog-mode-hook #'mortal-mode)
+(defun mortal/treesit-completion ()
+  "Complete symbols found in the current Tree-sitter buffer."
+  (when (treesit-parser-list)
+    (let ((beg (save-excursion
+                 (skip-syntax-backward "w_")
+                 (point)))
+          (end (point)))
+      (list beg end
+            (completion-table-dynamic
+             (lambda (_)
+               (let (symbols)
+                 (save-excursion
+                   (goto-char (point-min))
+                   (while (re-search-forward
+                           "\\_<[[:word:]_]+\\_>" nil t)
+                     (push (match-string-no-properties 0) symbols)))
+                 (delete-dups symbols))))))))
+
+
+(defun mortal/treesit-completion-setup ()
+  "Enable Tree-sitter completion without changing any keybindings."
+  (when (treesit-parser-list)
+    (add-hook 'completion-at-point-functions
+              #'mortal/treesit-completion
+              nil t)
+    (completion-preview-mode 1)))
+
+(add-hook 'prog-mode-hook #'mortal/treesit-completion-setup)
+
+;; treesitter
+(setq treesit-enabled-modes t)
+(setq treesit-auto-install-grammar 'always)
 
 
 ;; cursor style
@@ -75,10 +119,14 @@
 (delete-selection-mode 1)
 (setq-default indent-tabs-mode nil)
 (setq-default tab-width 4)
-(cua-selection-mode 1)
-(add-hook 'prog-mode-hook #'delete-trailing-whitespace-mode)
-(show-paren-mode 1)
 
+;; selection mode
+(cua-selection-mode 1)
+
+(with-eval-after-load 'cua-base
+  (define-key cua-global-keymap (kbd "C-<return>") nil))
+(show-paren-mode 1)
+(setq initial-scratch-message nil)
 
 ;; electric stuff
 (electric-quote-mode 1)
@@ -91,13 +139,6 @@
         (?\[ . ?\])
         (?\{ . ?\})
         (?\< . ?\>)))
-
-
-;; completions
-(icomplete-mode 1)
-(setq completion-auto-help 'always)
-(setq completion-preview-minimum-symbol-length 1)
-(global-completion-preview-mode 1)
 
 
 ;; scrolling
@@ -115,6 +156,57 @@
 
 ;; speedbar
 (with-eval-after-load 'speedbar
-  (setq speedbar-window-default-width 30
-        speedbar-window-max-width 30
-        speedbar--window-width 30))
+  (setq speedbar-prefer-window t
+        speedbar-window-default-width 25
+        speedbar-window-max-width 25)
+
+  ;; Emacs 31.1 mouse fix
+  (defun mortal/speedbar-fix (&rest _)
+    (setq speedbar-buffer
+          (or (and (buffer-live-p speedbar-buffer) speedbar-buffer)
+              (get-buffer-create speedbar--buffer-name)))
+    (with-current-buffer speedbar-buffer
+      (speedbar-mode)))
+  (advice-add 'speedbar-window-mode :before #'mortal/speedbar-fix)
+
+  ;; Open Speedbar files in the main window.
+  (advice-add 'speedbar-find-file-in-frame :override
+              (lambda (file)
+                (select-window (window-main-window))
+                (find-file file))))
+
+
+
+;; hide minor modes
+(setq mode-line-collapse-minor-modes
+      '(eldoc-mode
+        flymake-mode
+        visual-line-mode
+        which-key-mode
+        company-mode
+        completion-preview-mode
+        hs-minor-mode))
+
+
+;; folding
+(add-hook 'prog-mode-hook #'hs-minor-mode)
+
+(setq hs-show-indicators t)
+(setq hs-indicator-type 'fringe)
+
+
+;; eglot
+(require 'eglot)
+(assoc major-mode eglot-server-programs)
+
+;; flymake
+(add-hook 'prog-mode-hook #'flymake-mode)
+(add-hook 'prog-mode-hook #'eglot-ensure)
+
+;; term
+(add-hook 'term-exec-hook
+          (lambda ()
+            (tab-line-mode -1)
+            (set-process-query-on-exit-flag
+             (get-buffer-process (current-buffer))
+             nil)))
