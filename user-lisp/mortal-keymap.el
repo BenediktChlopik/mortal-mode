@@ -31,6 +31,14 @@ If a region is active, move all marked lines down instead."
                          (line-end-position))
     (end-of-line)))
 
+(require 'term)
+(defun mortal/copy-or-term-interrupt ()
+  "Interrupt Term, or copy the active region/current line."
+  (interactive)
+  (if (derived-mode-p 'term-mode)
+      (term-interrupt-subjob)
+    (mortal/copy-line-or-region)))
+
 
 (defun mortal/move-lines-vertically (direction)
   "Move selected lines up or down and keep them selected."
@@ -73,10 +81,11 @@ If a region is active, move all marked lines down instead."
 (defun mortal/quit ()
   "Quit the current operation or exit the minibuffer."
   (interactive)
-  (if (minibufferp)
-      (minibuffer-keyboard-quit)
+  (if (active-minibuffer-window)
+      (progn
+        (select-window (active-minibuffer-window))
+        (minibuffer-keyboard-quit))
     (keyboard-quit)))
-
 
 (defun mortal/tab-line-select-tab (n)
   (interactive "n")
@@ -84,37 +93,17 @@ If a region is active, move all marked lines down instead."
     (switch-to-buffer buffer)))
 
 
-(require 'treesit)
-
-(defvar-local mortal/treesit-mark-node nil)
-
-(defun mortal/mark-expand ()
-  "Mark the next Tree-sitter parent, or copy the whole buffer."
-  (interactive)
-  (let ((node (or mortal/treesit-mark-node
-                  (treesit-node-at (point) nil t))))
-    (if-let* ((parent (treesit-node-parent node)))
-        (progn
-          (setq mortal/treesit-mark-node parent)
-          (goto-char (treesit-node-start parent))
-          (push-mark (treesit-node-end parent) t t))
-      (kill-new (buffer-substring-no-properties
-                 (point-min) (point-max)))
-      (setq mortal/treesit-mark-node nil)
-      (message "Copied whole buffer"))))
-
-(add-hook 'deactivate-mark-hook
-          (lambda ()
-            (setq mortal/treesit-mark-node nil)))
-
-
-
 (defun mortal/toggle-term ()
   (interactive)
   (if-let* ((win (get-buffer-window "*terminal*")))
-      (with-selected-window win
-        (let ((confirm-kill-processes nil))
-          (kill-buffer-and-window)))
+      (if (eq win (selected-window))
+          ;; Terminal is open and focused: close it.
+          (with-selected-window win
+            (let ((confirm-kill-processes nil))
+              (kill-buffer-and-window)))
+        ;; Terminal is open but not focused: focus it.
+        (select-window win))
+    ;; Terminal isn't open: create and focus it.
     (let ((win (split-window (window-main-window)
                              (- (/ (window-total-height) 3))
                              'below)))
@@ -126,12 +115,130 @@ If a region is active, move all marked lines down instead."
 
 
 (defun mortal/tab-line-new-tab-menu ()
-  "Open a new scratch buffer as a tab, then open the buffer menu."
+  "Open the Tab Line new-tab menu."
   (interactive)
-  (switch-to-buffer (generate-new-buffer "*scratch*"))
-  (lisp-interaction-mode)
-  (let* ((posn (list (selected-window) (cons 0 0) (cons 0 0) 0)))
-    (mouse-buffer-menu (list 'mouse-1 posn))))
+  (tab-line-new-tab (list 'mouse-1)))
+
+
+(defun mortal/backward-delete-whitespace ()
+  "If a region is active, delete it.  Otherwise delete whitespace
+around point, crossing at most one newline: if a newline is
+crossed and the previous line was blank, reindent according to
+mode; if no whitespace surrounds point, delete one character the
+usual way."
+  (interactive "*")
+  (cond
+   ((use-region-p)
+    (delete-region (region-beginning) (region-end)))
+   ((not (looking-back "[ \t\n]" 1))
+    (backward-delete-char-untabify 1))
+   (t
+    (let (start blank-prev)
+      (save-excursion
+        (skip-chars-backward " \t")
+        (when (eq (char-before) ?\n)
+          (backward-char)
+          (skip-chars-backward " \t")
+          (setq blank-prev (bolp)))
+        (setq start (point)))
+      (delete-region start (progn (skip-chars-forward " \t") (point)))
+      (when blank-prev (indent-according-to-mode))))))
+
+
+(defun mortal/forward-delete-whitespace ()
+  "If a region is active, delete it.  Otherwise delete whitespace
+around point, crossing at most one newline: if a newline is
+crossed and the next line was blank, reindent according to
+mode; if no whitespace surrounds point, delete one character the
+usual way."
+  (interactive "*")
+  (cond
+   ((use-region-p)
+    (delete-region (region-beginning) (region-end)))
+   ((not (looking-at "[ \t\n]"))
+    (delete-char 1))
+   (t
+    (let (end blank-next)
+      (save-excursion
+        (skip-chars-forward " \t")
+        (when (eq (char-after) ?\n)
+          (forward-char)
+          (skip-chars-forward " \t")
+          (setq blank-next (eolp)))
+        (setq end (point)))
+      (delete-region (progn (skip-chars-backward " \t") (point)) end)
+      (when blank-next (indent-according-to-mode))))))
+
+
+
+(defun mortal/current-indent-offset ()
+  "Guess the indent width for the current major mode."
+  (cond ((and (boundp 'python-indent-offset) (derived-mode-p 'python-mode)) python-indent-offset)
+        ((and (boundp 'c-basic-offset) (derived-mode-p 'c-mode 'c++-mode 'java-mode)) c-basic-offset)
+        ((and (boundp 'js-indent-level) (derived-mode-p 'js-mode)) js-indent-level)
+        ((and (boundp 'sh-basic-offset) (derived-mode-p 'sh-mode)) sh-basic-offset)
+        (t tab-width)))
+
+(defun mortal/unindent-line-or-region ()
+  "Decrease indentation of the current line (or region) by one
+indent step, without going past column 0."
+  (interactive "*")
+  (let* ((beg (if (use-region-p) (region-beginning) (line-beginning-position)))
+         (end (if (use-region-p) (region-end) (line-end-position)))
+         (step (if (use-region-p) (mortal/current-indent-offset)
+                 (min (mortal/current-indent-offset) (current-indentation)))))
+    (indent-rigidly beg end (- step))))
+
+
+
+(defun mortal/newline-and-indent-current ()
+  "Insert a newline without ever reindenting the previous line.
+Indent only the newly created current line.
+If in the minibuffer, just run whatever command RET is normally
+bound to there instead."
+  (interactive)
+  (if (minibufferp)
+      (minibuffer-complete-and-exit)
+    (let (electric-indent-mode)      ; temporarily disable electric-indent's
+      (newline))                     ; hooks for this one newline
+    (indent-according-to-mode)))     ; indent just the line we landed on
+
+
+
+;; hack for marking whole buffer without moving point, because that would move view
+
+(require 'cl-lib)
+
+(defvar mortal/tsr--overlay nil)
+
+(defun mortal/tsr--cleanup-overlay ()
+  (when (overlayp mortal/tsr--overlay)
+    (delete-overlay mortal/tsr--overlay))
+  (setq mortal/tsr--overlay nil))
+
+(defun mortal/tsr--pre-command ()
+  "Run the next command as if the whole buffer were the active region,
+without ever moving point, mark, or scrolling the window."
+  (remove-hook 'pre-command-hook #'mortal/tsr--pre-command t)
+  (mortal/tsr--cleanup-overlay)
+  (cl-letf (((symbol-function 'region-beginning) (lambda () (point-min)))
+            ((symbol-function 'region-end)       (lambda () (point-max)))
+            ((symbol-function 'use-region-p)     (lambda () t))
+            ((symbol-function 'region-active-p)  (lambda () t))
+            (mark-active t))
+    (call-interactively this-command))
+  (setq this-command 'ignore))
+
+(defun mortal/temp-select-all-dispatch ()
+  "Visually mark the whole buffer with an overlay and arrange for the
+next command to act on it as the region -- all without moving point,
+mark, or scrolling the window."
+  (interactive)
+  (mortal/tsr--cleanup-overlay)
+  (setq mortal/tsr--overlay (make-overlay (point-min) (point-max)))
+  (overlay-put mortal/tsr--overlay 'face 'region)
+  (overlay-put mortal/tsr--overlay 'priority 1000)
+  (add-hook 'pre-command-hook #'mortal/tsr--pre-command nil t))
 
 
 
@@ -217,10 +324,18 @@ If a region is active, move all marked lines down instead."
     (define-key map (kbd "C-M-x") #'undefined)
     (define-key map (kbd "C-M-y") #'undefined)
     (define-key map (kbd "C-M-z") #'undefined)
-
-
+    
+    
     (define-key map (kbd "<escape>") #'mortal/quit)
 
+    ;; better deletion
+    (define-key map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
+    (define-key map (kbd "<delete>") #'mortal/forward-delete-whitespace)
+
+    ;; indent behaviour
+    (define-key map (kbd "<backtab>") #'mortal/unindent-line-or-region)
+    (define-key map (kbd "RET") #'mortal/newline-and-indent-current)
+    
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)
     (define-key map (kbd "<f2>") help-map)
@@ -235,9 +350,6 @@ If a region is active, move all marked lines down instead."
           (define-key map (kbd "<next>") #'which-key-show-next-page-cycle))
         (unless (lookup-key map (kbd "<prior>"))
           (define-key map (kbd "<prior>") #'which-key-show-previous-page-cycle))))
-
-    ;; tab behaviour
-    (define-key map (kbd "<backtab>") #'indent-rigidly-left-to-tab-stop)
 
     ;; tab management
     (define-key map (kbd "M-<left>") #'tab-line-switch-to-prev-tab)
@@ -254,7 +366,7 @@ If a region is active, move all marked lines down instead."
                       (mortal/tab-line-select-tab n)))))
 
     ;; select
-    (define-key map (kbd "C-a") #'mortal/mark-expand)
+    (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
 
     ;; emacs movement
     (define-key map (kbd "M-p") #'previous-line)
@@ -271,7 +383,7 @@ If a region is active, move all marked lines down instead."
 
     ;; clipboard
     (define-key map (kbd "C-x") #'mortal/kill-line-or-region)
-    (define-key map (kbd "C-c") #'mortal/copy-line-or-region)
+    (define-key map (kbd "C-c") #'mortal/copy-or-term-interrupt)
     (define-key map (kbd "C-v") #'yank)
 
     ;; file actions
@@ -291,8 +403,9 @@ If a region is active, move all marked lines down instead."
 
     ;; term
     (define-key map (kbd "C-M-t") #'mortal/toggle-term)
-
-
+    (define-key map (kbd "C-S-c") #'mortal/copy-line-or-region)
+    
     map))
+
 
 (provide 'mortal-keymap)

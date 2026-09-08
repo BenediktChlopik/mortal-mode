@@ -16,6 +16,8 @@
 ;; nobody needs those
 (setq-default make-backup-files nil)
 (setq-default auto-save-default nil)
+(setq initial-scratch-message nil)
+
 
 ;; mortal mode
 (require 'mortal-keymap)
@@ -31,7 +33,7 @@
              `((mortal-mode . ,mortal-map)))
 
 (mortal-mode 1)
-;;(add-hook 'prog-mode-hook #'mortal-mode)
+;; (add-hook 'prog-mode-hook #'mortal-mode)
 
 
 ;; theming
@@ -81,14 +83,27 @@
 (add-hook 'prog-mode-hook #'mortal/treesit-completion-setup)
 
 ;; treesitter
-(setq treesit-enabled-modes t)
 (setq treesit-auto-install-grammar 'always)
+
+(setq major-mode-remap-alist
+      '((python-mode . python-ts-mode)
+        (js-mode . js-ts-mode)
+        (typescript-mode . typescript-ts-mode)
+        (json-mode . json-ts-mode)
+        (css-mode . css-ts-mode)
+        (c-mode . c-ts-mode)
+        (c++-mode . c++-ts-mode)
+        (java-mode . java-ts-mode)
+        (rust-mode . rust-ts-mode)))
 
 
 ;; cursor style
 (blink-cursor-mode 1)
 (setq blink-cursor-blinks 0)
 (setq-default cursor-type '(bar . 2))
+
+;; tab width
+(setq tab-width 4)
 
 ;; highlight line
 (global-hl-line-mode 1)
@@ -114,6 +129,18 @@
 (desktop-save-mode 1)
 (save-place-mode 1)
 
+;; show emacs special buffers in a nice side bar
+(setq display-buffer-alist
+      `(("\\*terminal\\*" nil)
+        ("\\*.*\\*"
+         (display-buffer-in-side-window)
+         (side . right)
+         (window-width . 0.25)
+         (dedicated . t)
+         (preserve-size . (t . nil))
+         (body-function . ,(lambda (window)
+                              (with-current-buffer (window-buffer window)
+                                (tab-line-mode -1)))))))
 
 ;; editing modes
 (delete-selection-mode 1)
@@ -126,14 +153,13 @@
 (with-eval-after-load 'cua-base
   (define-key cua-global-keymap (kbd "C-<return>") nil))
 (show-paren-mode 1)
-(setq initial-scratch-message nil)
 
 ;; electric stuff
+(electric-indent-mode 1)
 (electric-quote-mode 1)
 (electric-pair-mode 1)
 (electric-layout-mode 1)
 (electric-layout-mode 1)
-(electric-indent-mode 1)
 (setq electric-pair-pairs
       '((?\( . ?\))
         (?\[ . ?\])
@@ -177,6 +203,51 @@
 
 
 
+
+;; highlight occurences
+(defface mortal-region-occurrence-face
+  '((t :background "#2e2e2e" :foreground unspecified))
+  "Light face used to highlight occurrences of the marked region.")
+
+(defvar-local mortal/region-ovs nil
+  "Overlays used to highlight occurrences of the marked region in this buffer.")
+
+(defun mortal/region-clear-overlays (&optional buffer)
+  "Delete highlight overlays in BUFFER (or current buffer)."
+  (when (buffer-live-p (or buffer (current-buffer)))
+    (with-current-buffer (or buffer (current-buffer))
+      (mapc #'delete-overlay mortal/region-ovs)
+      (setq mortal/region-ovs nil))))
+
+(defun mortal/region-highlight-update ()
+  "Highlight occurrences of the marked region in every visible window."
+  ;; Clear old overlays everywhere first.
+  (dolist (win (window-list))
+    (mortal/region-clear-overlays (window-buffer win)))
+  (when (use-region-p)
+    (let ((text (buffer-substring-no-properties (region-beginning) (region-end))))
+      (when (and (> (length text) 0)
+                 (string-match-p "[^[:space:]\n]" text))
+        (dolist (win (window-list))
+          (with-current-buffer (window-buffer win)
+            (save-excursion
+              (goto-char (point-min))
+              (while (search-forward text nil t)
+                (push (make-overlay (match-beginning 0) (match-end 0)) mortal/region-ovs)
+                (overlay-put (car mortal/region-ovs) 'face 'mortal-region-occurrence-face)))))))))
+
+(define-minor-mode mortal-region-occurrence-mode
+  "Highlight occurrences of the marked region in all windows; unhighlight when unmarked."
+  :lighter " RegHi"
+  :global t
+  (if mortal-region-occurrence-mode
+      (add-hook 'post-command-hook #'mortal/region-highlight-update)
+    (remove-hook 'post-command-hook #'mortal/region-highlight-update)
+    (dolist (buf (buffer-list))
+      (mortal/region-clear-overlays buf))))
+
+(mortal-region-occurrence-mode 1)
+
 ;; hide minor modes
 (setq mode-line-collapse-minor-modes
       '(eldoc-mode
@@ -185,7 +256,8 @@
         which-key-mode
         company-mode
         completion-preview-mode
-        hs-minor-mode))
+        hs-minor-mode
+        mortal-region-occurrence-mode))
 
 
 ;; folding
@@ -203,6 +275,9 @@
 (add-hook 'prog-mode-hook #'flymake-mode)
 (add-hook 'prog-mode-hook #'eglot-ensure)
 
+;; rightclick context of all possible commands
+(context-menu-mode 1)
+
 ;; term
 (add-hook 'term-exec-hook
           (lambda ()
@@ -210,3 +285,10 @@
             (set-process-query-on-exit-flag
              (get-buffer-process (current-buffer))
              nil)))
+
+(with-eval-after-load 'term
+  (setq term-char-mode-buffer-read-only nil))
+
+;; focus frames
+(setq focus-follows-mouse t)
+(setq mouse-autoselect-window t)
