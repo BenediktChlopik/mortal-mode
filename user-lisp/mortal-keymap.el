@@ -10,15 +10,6 @@
                          (line-end-position))
     (end-of-line)))
 
-(require 'term)
-(defun mortal/copy-or-term-interrupt ()
-  "Interrupt Term, or copy the active region/current line."
-  (interactive)
-  (if (derived-mode-p 'term-mode)
-      (term-interrupt-subjob)
-    (mortal/copy-line-or-region)))
-
-
 
 
 (defun mortal/move-lines-vertically (direction)
@@ -66,6 +57,7 @@ If a region is active, move all marked lines down instead."
   (interactive)
   (delete-region (line-beginning-position) (1+ (line-end-position))))
 
+
 (defun mortal/kill-line-or-region ()
   "Kill the active region, or the whole current line if no region is active."
   (interactive)
@@ -74,11 +66,13 @@ If a region is active, move all marked lines down instead."
     (kill-region (line-beginning-position) (line-beginning-position 2))))
 
 
+
 (defun mortal/insert-line-below ()
   "Insert a new line below the current line and move point there."
   (interactive)
   (end-of-line)
   (newline-and-indent))
+
 
 
 (require 'delsel)
@@ -91,30 +85,13 @@ If a region is active, move all marked lines down instead."
         (minibuffer-keyboard-quit))
     (keyboard-quit)))
 
+
 (defun mortal/tab-line-select-tab (n)
   (interactive "n")
   (when-let* ((buffer (nth (1- n) (tab-line-tabs-fixed-window-buffers))))
     (switch-to-buffer buffer)))
 
 
-(defun mortal/toggle-term ()
-  (interactive)
-  (if-let* ((win (get-buffer-window "*terminal*")))
-      (if (eq win (selected-window))
-          ;; Terminal is open and focused: close it.
-          (let ((confirm-kill-processes nil))
-            (kill-buffer-and-window))
-        ;; Terminal is open but not focused: focus it.
-        (select-window win))
-    ;; Terminal isn't open: create and focus it.
-    (let ((win (split-window (window-main-window)
-                             (- (/ (window-total-height) 3))
-                             'below)))
-      (select-window win)
-      (term (or (getenv "SHELL") "/bin/sh"))
-      (tab-line-mode -1)
-      (set-process-query-on-exit-flag
-       (get-buffer-process (current-buffer)) nil))))
 
 (defun mortal/tab-line-new-tab-menu ()
   "Open the Tab Line new-tab menu."
@@ -192,7 +169,7 @@ indent step, without going past column 0."
     (indent-rigidly beg end (- step))))
 
 
-
+(require 'esh-mode)
 (defun mortal/newline-and-indent-current ()
   "Insert a newline without ever reindenting the previous line.
 Indent only the newly created current line.
@@ -204,12 +181,12 @@ the current input instead of inserting a newline."
   (cond
    ((minibufferp)
     (minibuffer-complete-and-exit))
-   ((derived-mode-p 'term-mode)
-    (term-send-input))
    (t
     (let (electric-indent-mode)      ; temporarily disable electric-indent's
       (newline))                     ; hooks for this one newline
     (indent-according-to-mode))))    ; indent just the line we landed on
+
+
 
 
 ;; hack for marking whole buffer without moving point, because that would move view
@@ -389,13 +366,10 @@ mark, or scrolling the window."
     ;; deleting
     (define-key map (kbd "C-k") #'mortal/delete-line)
 
-    ;; term
-    (define-key map (kbd "C-M-t") #'mortal/toggle-term)
-    (define-key map (kbd "C-S-c") #'mortal/copy-line-or-region)
     
     ;; clipboard
     (define-key map (kbd "C-x") #'mortal/kill-line-or-region)
-    (define-key map (kbd "C-c") #'mortal/copy-or-term-interrupt)
+    (define-key map (kbd "C-c") #'mortal/copy-line-or-region)
     (define-key map (kbd "C-v") #'yank)
 
     ;; file actions

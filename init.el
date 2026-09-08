@@ -129,7 +129,7 @@
 
 ;; show emacs special buffers in a nice side bar
 (setq display-buffer-alist
-      `(("\\*terminal\\*" nil)
+      `(("\\*shell\\*" nil)
         ("\\*.*\\*"
          (display-buffer-in-side-window)
          (side . right)
@@ -270,7 +270,6 @@
 (setq hs-show-indicators t)
 (setq hs-indicator-type 'fringe)
 
-
 ;; eglot
 (require 'eglot)
 (assoc major-mode eglot-server-programs)
@@ -281,17 +280,6 @@
 
 ;; right click context of all possible commands at point
 (context-menu-mode 1)
-
-;; term
-(add-hook 'term-exec-hook
-          (lambda ()
-            (tab-line-mode -1)
-            (set-process-query-on-exit-flag
-             (get-buffer-process (current-buffer))
-             nil)))
-
-(with-eval-after-load 'term
-  (setq term-char-mode-buffer-read-only nil))
 
 ;; focus frames
 (setq focus-follows-mouse t)
