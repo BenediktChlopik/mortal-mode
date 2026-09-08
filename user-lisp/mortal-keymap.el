@@ -102,9 +102,8 @@ If a region is active, move all marked lines down instead."
   (if-let* ((win (get-buffer-window "*terminal*")))
       (if (eq win (selected-window))
           ;; Terminal is open and focused: close it.
-          (with-selected-window win
-            (let ((confirm-kill-processes nil))
-              (kill-buffer-and-window)))
+          (let ((confirm-kill-processes nil))
+            (kill-buffer-and-window))
         ;; Terminal is open but not focused: focus it.
         (select-window win))
     ;; Terminal isn't open: create and focus it.
@@ -116,7 +115,6 @@ If a region is active, move all marked lines down instead."
       (tab-line-mode -1)
       (set-process-query-on-exit-flag
        (get-buffer-process (current-buffer)) nil))))
-
 
 (defun mortal/tab-line-new-tab-menu ()
   "Open the Tab Line new-tab menu."

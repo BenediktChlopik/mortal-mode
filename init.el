@@ -196,8 +196,12 @@
   ;; Open Speedbar files in the main window.
   (advice-add 'speedbar-find-file-in-frame :override
               (lambda (file)
-                (select-window (window-main-window))
+                (let ((win (window-main-window)))
+                  (if (window-live-p win)
+                      (select-window win)
+                    (other-window 1)))
                 (find-file file))))
+
 
 
 
