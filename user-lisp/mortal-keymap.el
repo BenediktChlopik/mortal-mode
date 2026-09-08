@@ -199,14 +199,19 @@ indent step, without going past column 0."
   "Insert a newline without ever reindenting the previous line.
 Indent only the newly created current line.
 If in the minibuffer, just run whatever command RET is normally
-bound to there instead."
+bound to there instead.
+If in a terminal/REPL-like buffer (comint, eshell, term), send
+the current input instead of inserting a newline."
   (interactive)
-  (if (minibufferp)
-      (minibuffer-complete-and-exit)
+  (cond
+   ((minibufferp)
+    (minibuffer-complete-and-exit))
+   ((derived-mode-p 'term-mode)
+    (term-send-input))
+   (t
     (let (electric-indent-mode)      ; temporarily disable electric-indent's
       (newline))                     ; hooks for this one newline
-    (indent-according-to-mode)))     ; indent just the line we landed on
-
+    (indent-according-to-mode))))    ; indent just the line we landed on
 
 
 ;; hack for marking whole buffer without moving point, because that would move view
@@ -248,6 +253,7 @@ mark, or scrolling the window."
 
 
 (require 'tab-line)
+
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
     ;; undefine C-*, M-*, and C-M-* besides C-i, C-j, C-m.
