@@ -1,5 +1,42 @@
 ;; -*- lexical-binding: t; -*-
 
+
+(defun mortal/copy-line-or-region ()
+  "Copy the active region, or the current line with its preceding newline."
+  (interactive)
+  (if (use-region-p)
+      (copy-region-as-kill (region-beginning) (region-end))
+    (copy-region-as-kill (max (point-min) (1- (line-beginning-position)))
+                         (line-end-position))
+    (end-of-line)))
+
+(require 'term)
+(defun mortal/copy-or-term-interrupt ()
+  "Interrupt Term, or copy the active region/current line."
+  (interactive)
+  (if (derived-mode-p 'term-mode)
+      (term-interrupt-subjob)
+    (mortal/copy-line-or-region)))
+
+
+
+
+(defun mortal/move-lines-vertically (direction)
+  "Move selected lines up or down and keep them selected."
+  (interactive "p")
+  (let* ((beg (line-beginning-position))
+         (end (save-excursion
+                (goto-char (region-end))
+                (if (bolp) (point) (line-beginning-position 2))))
+         (text (delete-and-extract-region beg end)))
+    (goto-char beg)
+    (forward-line direction)
+    (let ((beg (point)))
+      (insert text)
+      (set-mark (point))
+      (goto-char beg)
+      (setq deactivate-mark nil))))
+
 (defun mortal/move-line-up ()
   "Move the current line up.
 If a region is active, move all marked lines up instead."
@@ -22,39 +59,6 @@ If a region is active, move all marked lines down instead."
       (forward-line -1))))
 
 
-(defun mortal/copy-line-or-region ()
-  "Copy the active region, or the current line with its preceding newline."
-  (interactive)
-  (if (use-region-p)
-      (copy-region-as-kill (region-beginning) (region-end))
-    (copy-region-as-kill (max (point-min) (1- (line-beginning-position)))
-                         (line-end-position))
-    (end-of-line)))
-
-(require 'term)
-(defun mortal/copy-or-term-interrupt ()
-  "Interrupt Term, or copy the active region/current line."
-  (interactive)
-  (if (derived-mode-p 'term-mode)
-      (term-interrupt-subjob)
-    (mortal/copy-line-or-region)))
-
-
-(defun mortal/move-lines-vertically (direction)
-  "Move selected lines up or down and keep them selected."
-  (interactive "p")
-  (let* ((beg (line-beginning-position))
-         (end (save-excursion
-                (goto-char (region-end))
-                (if (bolp) (point) (line-beginning-position 2))))
-         (text (delete-and-extract-region beg end)))
-    (goto-char beg)
-    (forward-line direction)
-    (let ((beg (point)))
-      (insert text)
-      (set-mark (point))
-      (goto-char beg)
-      (setq deactivate-mark nil))))
 
 
 (defun mortal/delete-line ()
@@ -381,6 +385,10 @@ mark, or scrolling the window."
     ;; deleting
     (define-key map (kbd "C-k") #'mortal/delete-line)
 
+    ;; term
+    (define-key map (kbd "C-M-t") #'mortal/toggle-term)
+    (define-key map (kbd "C-S-c") #'mortal/copy-line-or-region)
+    
     ;; clipboard
     (define-key map (kbd "C-x") #'mortal/kill-line-or-region)
     (define-key map (kbd "C-c") #'mortal/copy-or-term-interrupt)
@@ -400,10 +408,6 @@ mark, or scrolling the window."
 
     ;; replace
     (define-key map (kbd "C-r") #'query-replace)
-
-    ;; term
-    (define-key map (kbd "C-M-t") #'mortal/toggle-term)
-    (define-key map (kbd "C-S-c") #'mortal/copy-line-or-region)
     
     map))
 

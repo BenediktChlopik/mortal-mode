@@ -82,6 +82,7 @@
 
 (add-hook 'prog-mode-hook #'mortal/treesit-completion-setup)
 
+
 ;; treesitter
 (setq treesit-auto-install-grammar 'always)
 
@@ -101,9 +102,6 @@
 (blink-cursor-mode 1)
 (setq blink-cursor-blinks 0)
 (setq-default cursor-type '(bar . 2))
-
-;; tab width
-(setq tab-width 4)
 
 ;; highlight line
 (global-hl-line-mode 1)
@@ -248,6 +246,8 @@
 
 (mortal-region-occurrence-mode 1)
 
+
+
 ;; hide minor modes
 (setq mode-line-collapse-minor-modes
       '(eldoc-mode
@@ -275,7 +275,7 @@
 (add-hook 'prog-mode-hook #'flymake-mode)
 (add-hook 'prog-mode-hook #'eglot-ensure)
 
-;; rightclick context of all possible commands
+;; right click context of all possible commands at point
 (context-menu-mode 1)
 
 ;; term

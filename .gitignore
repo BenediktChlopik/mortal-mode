@@ -7,3 +7,6 @@ eln-cache
 places.eld
 .emacs.desktop
 *.elc
+tree-sitter
+*/*.elc
+*.eld
