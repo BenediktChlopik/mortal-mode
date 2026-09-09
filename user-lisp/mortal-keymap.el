@@ -13,20 +13,36 @@
 
 
 (defun mortal/move-lines-vertically (direction)
-  "Move selected lines up or down and keep them selected."
+  "Move selected lines up or down and keep them selected.
+DIRECTION is the number of lines to move by: negative moves up,
+positive moves down.  The move is done with a single
+`transpose-regions' call -- the same primitive `transpose-lines'
+uses -- so Emacs records it as one atomic undo step, undoing and
+redoing cleanly even under `undo-tree-mode'."
   (interactive "p")
-  (let* ((beg (line-beginning-position))
-         (end (save-excursion
-                (goto-char (region-end))
-                (if (bolp) (point) (line-beginning-position 2))))
-         (text (delete-and-extract-region beg end)))
-    (goto-char beg)
-    (forward-line direction)
-    (let ((beg (point)))
-      (insert text)
-      (set-mark (point))
-      (goto-char beg)
-      (setq deactivate-mark nil))))
+  (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
+         (end (save-excursion (goto-char (region-end))
+                               (if (bolp) (point) (line-beginning-position 2))))
+         (len (- end beg)))
+    (cond
+     ((< direction 0)
+      (let ((prev-beg (save-excursion (goto-char beg) (forward-line direction) (point))))
+        (if (= prev-beg beg)
+            (message "Can't move further up")
+          (transpose-regions prev-beg beg beg end)
+          (goto-char (+ prev-beg len))
+          (set-mark (point))
+          (goto-char prev-beg)
+          (setq deactivate-mark nil))))
+     ((> direction 0)
+      (let ((next-end (save-excursion (goto-char end) (forward-line direction) (point))))
+        (if (= next-end end)
+            (message "Can't move further down")
+          (transpose-regions beg end end next-end)
+          (goto-char next-end)
+          (set-mark (point))
+          (goto-char (- next-end len))
+          (setq deactivate-mark nil)))))))
 
 (defun mortal/move-line-up ()
   "Move the current line up.
@@ -48,7 +64,6 @@ If a region is active, move all marked lines down instead."
       (forward-line 1)
       (transpose-lines 1)
       (forward-line -1))))
-
 
 
 
@@ -80,10 +95,9 @@ If a region is active, move all marked lines down instead."
   "Quit the current operation or exit the minibuffer."
   (interactive)
   (if (active-minibuffer-window)
-      (progn
         (select-window (active-minibuffer-window))
         (minibuffer-keyboard-quit))
-    (keyboard-quit)))
+    (keyboard-quit))
 
 
 (defun mortal/tab-line-select-tab (n)
@@ -91,12 +105,11 @@ If a region is active, move all marked lines down instead."
   (when-let* ((buffer (nth (1- n) (tab-line-tabs-fixed-window-buffers))))
     (switch-to-buffer buffer)))
 
-
-
 (defun mortal/tab-line-new-tab-menu ()
   "Open the Tab Line new-tab menu."
   (interactive)
   (tab-line-new-tab (list 'mouse-1)))
+
 
 
 (defun mortal/backward-delete-whitespace ()
@@ -152,21 +165,58 @@ usual way."
 
 (defun mortal/current-indent-offset ()
   "Guess the indent width for the current major mode."
-  (cond ((and (boundp 'python-indent-offset) (derived-mode-p 'python-mode)) python-indent-offset)
-        ((and (boundp 'c-basic-offset) (derived-mode-p 'c-mode 'c++-mode 'java-mode)) c-basic-offset)
-        ((and (boundp 'js-indent-level) (derived-mode-p 'js-mode)) js-indent-level)
-        ((and (boundp 'sh-basic-offset) (derived-mode-p 'sh-mode)) sh-basic-offset)
-        (t tab-width)))
+  (cond
+   ((and (boundp 'python-indent-offset) (derived-mode-p 'python-mode 'python-ts-mode))
+    python-indent-offset)
+   ((and (boundp 'c-basic-offset) (derived-mode-p 'c-mode 'c++-mode 'java-mode))
+    c-basic-offset)
+   ((and (boundp 'c-ts-mode-indent-offset) (derived-mode-p 'c-ts-mode 'c++-ts-mode))
+    c-ts-mode-indent-offset)
+   ((and (boundp 'java-ts-mode-indent-offset) (derived-mode-p 'java-ts-mode))
+    java-ts-mode-indent-offset)
+   ((and (boundp 'js-indent-level) (derived-mode-p 'js-mode 'js-ts-mode 'json-mode))
+    js-indent-level)
+   ((and (boundp 'typescript-indent-level) (derived-mode-p 'typescript-mode))
+    typescript-indent-level)
+   ((and (boundp 'typescript-ts-mode-indent-offset) (derived-mode-p 'typescript-ts-mode 'tsx-ts-mode))
+    typescript-ts-mode-indent-offset)
+   ((and (boundp 'json-ts-mode-indent-offset) (derived-mode-p 'json-ts-mode))
+    json-ts-mode-indent-offset)
+   ((and (boundp 'css-indent-offset) (derived-mode-p 'css-mode))
+    css-indent-offset)
+   ((and (boundp 'css-ts-mode-indent-offset) (derived-mode-p 'css-ts-mode))
+    css-ts-mode-indent-offset)
+   ((and (boundp 'rust-indent-offset) (derived-mode-p 'rust-mode))
+    rust-indent-offset)
+   ((and (boundp 'rust-ts-mode-indent-offset) (derived-mode-p 'rust-ts-mode))
+    rust-ts-mode-indent-offset)
+   ((and (boundp 'sh-basic-offset) (derived-mode-p 'sh-mode))
+    sh-basic-offset)
+   (t tab-width)))
+
 
 (defun mortal/unindent-line-or-region ()
   "Decrease indentation of the current line (or region) by one
-indent step, without going past column 0."
+indent step, without going past column 0. If a region is active,
+it is expanded to cover whole lines, and stays selected as such."
   (interactive "*")
-  (let* ((beg (if (use-region-p) (region-beginning) (line-beginning-position)))
-         (end (if (use-region-p) (region-end) (line-end-position)))
-         (step (if (use-region-p) (mortal/current-indent-offset)
-                 (min (mortal/current-indent-offset) (current-indentation)))))
-    (indent-rigidly beg end (- step))))
+  (let* ((region-p (use-region-p))
+         (beg (if region-p (save-excursion (goto-char (region-beginning)) (line-beginning-position))
+                (line-beginning-position)))
+         (end (if region-p (save-excursion (goto-char (region-end)) (line-end-position))
+                (line-end-position)))
+         (offset (mortal/current-indent-offset))
+         (end-marker (copy-marker end))
+         (deactivate-mark nil))
+    (save-excursion
+      (goto-char beg)
+      (while (< (point) end-marker)
+        (indent-line-to (max 0 (- (current-indentation) offset)))
+        (forward-line 1)))
+    (when region-p
+      (goto-char beg)
+      (push-mark end-marker nil t))
+    (set-marker end-marker nil)))
 
 
 (require 'esh-mode)

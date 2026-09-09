@@ -271,7 +271,8 @@
 (setq hs-indicator-type 'fringe)
 
 ;; eglot
-(require 'eglot)
+(use-package eglot
+  :ensure t)
 (assoc major-mode eglot-server-programs)
 
 ;; flymake
