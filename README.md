@@ -20,7 +20,7 @@ Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and
 | Key | Command |
 |---|---|
 | `<escape>` | quit out of anything |
-| `<backspace>` | deleting all whitespaces before deleting one char |
+| `<backspace>` | deleting all whitespaces or one char |
 | `<delete>` | same as above |
 | `<tab>` | smartly indent |
 | `<backtab>` | smartly unindent |
