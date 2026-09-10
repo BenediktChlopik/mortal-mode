@@ -115,8 +115,17 @@
 
 ;; other ui modes
 (scroll-bar-mode -1)
-(which-key-mode 1)
 (add-hook 'prog-mode-hook #'display-line-numbers-mode)
+
+;; which key stuff
+(which-key-mode 1)
+(dolist (entry (accessible-keymaps global-map)) ;; todo: in ctl-x-map there are 2 instances of <prior> and <next>
+  (let ((keymap (cdr entry)))
+    (unless (lookup-key keymap (kbd "<next>"))
+      (define-key keymap (kbd "<next>") #'which-key-show-next-page-cycle))
+    (unless (lookup-key keymap (kbd "<prior>"))
+      (define-key keymap (kbd "<prior>") #'which-key-show-previous-page-cycle))))
+
 
 ;; tab line
 (global-tab-line-mode 1)

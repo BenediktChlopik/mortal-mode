@@ -436,6 +436,8 @@ active region."
     (define-key map (kbd "C-M-y") #'undefined)
     (define-key map (kbd "C-M-z") #'undefined)
     
+    
+    ;; quiting
     (define-key map (kbd "<escape>") #'mortal/quit)
     
     ;; better deletion
@@ -452,13 +454,7 @@ active region."
     (define-key map (kbd "M-x") #'execute-extended-command)
     (define-key map (kbd "C-g") goto-map)
     (define-key map (kbd "C-f") search-map)
-
-    ;; which key binds
-    (dolist (entry (accessible-keymaps global-map))
-      (let ((map (cdr entry))) ;; double entry in which key menu
-        (define-key map (kbd "<next>") #'which-key-show-next-page-cycle) 
-        (define-key map (kbd "<prior>") #'which-key-show-previous-page-cycle)))
-
+    
     ;; tab management
     (define-key map (kbd "M-<left>") #'tab-line-switch-to-prev-tab)
     (define-key map (kbd "M-<right>") #'tab-line-switch-to-next-tab)
