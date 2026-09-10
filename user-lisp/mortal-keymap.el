@@ -444,6 +444,7 @@ the current line first."
     (delete-region (region-beginning) (region-end)))
   (insert (substring-no-properties (current-kill 0)) "\n"))
 
+
 (require 'tab-line)
 
 (defvar mortal-map
@@ -598,11 +599,6 @@ the current line first."
     ;; replace
     (define-key map (kbd "C-r") #'query-replace)
     
-    ;; zoom text
-    (define-key map (kbd "C-+") #'text-scale-increase)
-    (define-key map (kbd "C--") #'text-scale-decrease)
-    (define-key map (kbd "C-=") #'text-scale-set)
-
     ;; auto commenting
     (define-key map (kbd "C-;") #'mortal/comment-dwim)
     
