@@ -409,6 +409,29 @@ active region."
   (undo-redo))
 
 
+
+(defun mortal/comment-dwim ()
+  "Like `comment-dwim', but expand a half-marked region to whole lines first,
+and keep the region active/marked afterwards."
+  (interactive "*")
+  (if (and (use-region-p)
+           (not (eq (region-beginning) (region-end))))
+      (let ((beg (save-excursion
+                   (goto-char (region-beginning))
+                   (line-beginning-position)))
+            (end (save-excursion
+                   (goto-char (region-end))
+                   (if (bolp) (point) (line-end-position)))))
+        (goto-char beg)
+        (push-mark end nil t)
+        (comment-dwim nil)
+        ;; comment-dwim/comment-region typically deactivate the mark;
+        ;; force it back on with the (possibly shifted) bounds.
+        (setq deactivate-mark nil)
+        (activate-mark))
+    (comment-dwim nil)))
+
+
 (require 'tab-line)
 
 (defvar mortal-map
@@ -568,7 +591,7 @@ active region."
     (define-key map (kbd "C--") #'text-scale-decrease)
 
     ;; auto commenting
-    (define-key map (kbd "C-;") #'comment-dwim)
+    (define-key map (kbd "C-;") #'mortal/comment-dwim)
     
     ;; smarter point movement
     (define-key map (kbd "C-<left>") #'mortal/backward)
