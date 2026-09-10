@@ -15,12 +15,12 @@ git clone https://github.com/BenediktChlopik/mortal-mode.git .emacs.d
 I’ve used this config for a few months, and it’s becoming really close to the modern text editor experience. Contributions are welcome, but I’ll keep this config vanilla.
 
 
-Here's the full set of keybindings from `mortal-map`. Note that all `C-*`, `M-*`, and `C-M-*` keys are first explicitly unbound (`#'undefined`), and then a subset is rebound — so the table below reflects the **final, effective** bindings after that rebinding.
+Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and `C-M-*` keys are unbound, and then some are rebound. The table below shows the final bindings.
 
 | Key | Command |
 |---|---|
 | `<escape>` | quit out of anything |
-| `<backspace>` | deleting all whitespaces before deleting one char |
+| `<backspace>` | deleting all whitespaces or one char |
 | `<delete>` | same as above |
 | `<tab>` | smartly indent |
 | `<backtab>` | smartly unindent |
