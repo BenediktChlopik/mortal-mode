@@ -120,45 +120,101 @@ Priority mirrors how a real C-g would be dispatched by the active keymap:
 
 
 
-(defun mortal/forward ()
-  "Move point forward one \"smart\" step.
+(defun mortal/move (dir)
+  "Move point one \"smart\" step in DIR (1 = forward, -1 = backward).
 
-Rules:
+Rules (stated for DIR = 1; mirror for DIR = -1):
 
-1. If point is right before a character string (a contiguous run of
-   non-whitespace characters), first skip forward over the whole string,
-   and then run over tabs/spaces after that.
+1. Every character belongs to one of three groups: word characters
+   ([A-Za-z0-9]), special characters (everything else except
+   tabs/spaces/newline), and whitespace (tabs/spaces).
 
-2. While skipping that whitespace, do NOT cross a newline: if the
-   whitespace run is the line's trailing whitespace (i.e. consuming
-   it would put point at the end of the line), stop right before
-   that trailing whitespace instead.
+2. If point is right before a character string (i.e. not sitting on
+   whitespace), a step always crosses two of those three groups: it
+   skips over the run of the group at point, and then continues and
+   skips over the following run too, even if that run belongs to a
+   different group (e.g. word characters into special characters, or
+   the reverse). It does NOT stop merely because the character class
+   changed.
 
-3. If point is already at such a stop (only tabs/spaces, or nothing,
+3. While crossing that second group, do NOT cross a newline: if the
+   second group is whitespace and it is the line's trailing
+   whitespace (i.e. crossing it would put point at the end of the
+   line), stop right before it instead -- crossing only the first
+   group.
+
+4. If point is already at such a stop (only tabs/spaces, or nothing,
    between point and the end of the line), then this call crosses
    the newline and lands at the tab indent of the next line."
+  (let ((skip (lambda (chars)
+                (if (> dir 0) (skip-chars-forward chars)
+                  (skip-chars-backward chars))))
+        (at-edge-p (lambda ()
+                     (if (> dir 0)
+                         (looking-at "[ \t]*$")
+                       (looking-back "^[ \t]*" (line-beginning-position)))))
+        (on-ws-p (lambda ()
+                   (if (> dir 0)
+                       (looking-at "[ \t]")
+                     (looking-back "[ \t]" (1- (point))))))
+        (class-at (lambda ()
+                    ;; Class of the character adjacent to point in DIR:
+                    ;; 'word, 'special, 'ws, or nil (newline / buffer edge).
+                    (let ((ch (if (> dir 0) (char-after) (char-before))))
+                      (cond
+                       ((null ch) nil)
+                       ((eq ch ?\n) nil)
+                       ((string-match-p "[A-Za-z0-9]" (string ch)) 'word)
+                       ((string-match-p "[ \t]" (string ch)) 'ws)
+                       (t 'special)))))
+        (class-chars (lambda (class)
+                       (pcase class
+                         ('word "A-Za-z0-9")
+                         ('ws " \t")
+                         ('special "^A-Za-z0-9 \t\n")))))
+    (cond
+     ;; Rule 4: already at a stop -> cross the newline.
+     ((funcall at-edge-p)
+      (forward-line dir)
+      (if (> dir 0)
+          (skip-chars-forward " \t")
+        (end-of-line)
+        (skip-chars-backward " \t")))
+     ;; Sitting on non-trailing whitespace -> just cross it.
+     ((funcall on-ws-p)
+      (funcall skip " \t"))
+     ;; Rules 1-3: cross two of the three groups.
+     (t
+      (let ((c1 (funcall class-at)))
+        (funcall skip (funcall class-chars c1))
+        (let ((c2 (funcall class-at)))
+          (when (and c2 (not (funcall at-edge-p)))
+            (funcall skip (funcall class-chars c2)))))))))
+
+(defun mortal/forward ()
+  "Move point forward one \"smart\" step."
   (interactive)
-  )
+  (mortal/move 1))
 
 (defun mortal/backward ()
-  "Move point backward one \"smart\" step.
-
-Rules:
-
-1. If point is right after a character string (a contiguous run of
-   non-whitespace characters), first skip backward over that whole
-   string, then over the run of tabs/spaces immediately before it.
-
-2. While skipping that whitespace, do NOT cross a newline: if the
-   whitespace run is the line's leading indentation (i.e. consuming
-   it would put point at the beginning of the line), stop right
-   after the indentation instead - this is the \"tab indent\" stop.
-
-3. If point is already at such a stop (only tabs/spaces, or nothing,
-   between point and the end of the line), then this call crosses
-   the newline and lands at the end of of the previous line."
+  "Move point backward one \"smart\" step."
   (interactive)
-  )
+  (mortal/move -1))
+
+(defun mortal/mark-n-forward ()
+  "Move point forward one \"smart\" step, starting a mark region if none is active."
+  (interactive)
+  (unless (region-active-p)
+    (push-mark (point) t t))
+  (mortal/move 1))
+
+(defun mortal/mark-n-backward ()
+  "Move point backward one \"smart\" step, starting a mark region if none is active."
+  (interactive)
+  (unless (region-active-p)
+    (push-mark (point) t t))
+  (mortal/move -1))
+
 
 
 (defun mortal/forward-delete-whitespace ()
@@ -510,15 +566,17 @@ active region."
     ;; zoom text
     (define-key map (kbd "C-+") #'text-scale-increase)
     (define-key map (kbd "C--") #'text-scale-decrease)
-    
-    
-    ;; future
-    
-    ;; (define-key map (kbd "C-;") #'mortal/toggle-comment-line-or-region)
+
+    ;; auto commenting
+    (define-key map (kbd "C-;") #'comment-dwim)
     
     ;; smarter point movement
-    ;; (define-key map (kbd "C-<left>") #'mortal/backward)
-    ;; (define-key map (kbd "C-<right>") #'mortal/forward)
+    (define-key map (kbd "C-<left>") #'mortal/backward)
+    (define-key map (kbd "C-<right>") #'mortal/forward)
+    
+    (define-key map (kbd "C-S-<left>") #'mortal/mark-n-backward)
+    (define-key map (kbd "C-S-<right>") #'mortal/mark-n-forward)
+
     
     map))
 
