@@ -295,6 +295,7 @@ indenting only the newly created line."
     (indent-according-to-mode))))    ; indent just the line we landed on
 
 
+
 ;; hack for marking whole buffer without moving point, because that would move view
 
 (require 'cl-lib)
@@ -355,7 +356,7 @@ active region."
 
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
-    ;; undefine C-*, M-*, and C-M-* besides C-i, C-j, C-m.
+    ;; undefine C-*, M-*, and C-M-* besides C-i, C-m.
     (define-key map (kbd "C-a") #'undefined)
     (define-key map (kbd "C-b") #'undefined)
     (define-key map (kbd "C-c") #'undefined)
@@ -364,6 +365,7 @@ active region."
     (define-key map (kbd "C-f") #'undefined)
     (define-key map (kbd "C-g") #'undefined)
     (define-key map (kbd "C-h") #'undefined)
+    (define-key map (kbd "C-j") #'undefined)
     (define-key map (kbd "C-k") #'undefined)
     (define-key map (kbd "C-l") #'undefined)
     (define-key map (kbd "C-n") #'undefined)
