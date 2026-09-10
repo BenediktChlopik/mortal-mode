@@ -432,6 +432,12 @@ and keep the region active/marked afterwards."
     (comment-dwim nil)))
 
 
+(defun mortal/yank-plain ()
+  (interactive)
+  (insert (substring-no-properties (current-kill 0))))
+
+
+
 (require 'tab-line)
 
 (defvar mortal-map
@@ -569,7 +575,7 @@ and keep the region active/marked afterwards."
     ;; clipboard
     (define-key map (kbd "C-x") #'mortal/kill-line-or-region)
     (define-key map (kbd "C-c") #'mortal/copy-line-or-region)
-    (define-key map (kbd "C-v") #'yank)
+    (define-key map (kbd "C-v") #'mortal/yank-plain)
 
     ;; file actions
     (define-key map (kbd "C-s") #'save-buffer)
