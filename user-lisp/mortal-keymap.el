@@ -438,11 +438,11 @@ the current line first."
       (setq deactivate-mark nil)
       (activate-mark))))
 
-
 (defun mortal/yank-plain ()
   (interactive)
-  (insert (substring-no-properties (current-kill 0))))
-
+  (when (use-region-p)
+    (delete-region (region-beginning) (region-end)))
+  (insert (substring-no-properties (current-kill 0)) "\n"))
 
 (require 'tab-line)
 
