@@ -202,51 +202,6 @@
 
 
 
-;; highlight occurences
-(defface mortal-region-occurrence-face
-  '((t :background "#2e2e2e" :foreground unspecified))
-  "Light face used to highlight occurrences of the marked region.")
-
-(defvar-local mortal/region-ovs nil
-  "Overlays used to highlight occurrences of the marked region in this buffer.")
-
-(defun mortal/region-clear-overlays (&optional buffer)
-  "Delete highlight overlays in BUFFER (or current buffer)."
-  (when (buffer-live-p (or buffer (current-buffer)))
-    (with-current-buffer (or buffer (current-buffer))
-      (mapc #'delete-overlay mortal/region-ovs)
-      (setq mortal/region-ovs nil))))
-
-(defun mortal/region-highlight-update ()
-  "Highlight occurrences of the marked region in every visible window."
-  ;; Clear old overlays everywhere first.
-  (dolist (win (window-list))
-    (mortal/region-clear-overlays (window-buffer win)))
-  (when (use-region-p)
-    (let ((text (buffer-substring-no-properties (region-beginning) (region-end))))
-      (when (and (> (length text) 0)
-                 (string-match-p "[^[:space:]\n]" text))
-        (dolist (win (window-list))
-          (with-current-buffer (window-buffer win)
-            (save-excursion
-              (goto-char (point-min))
-              (while (search-forward text nil t)
-                (push (make-overlay (match-beginning 0) (match-end 0)) mortal/region-ovs)
-                (overlay-put (car mortal/region-ovs) 'face 'mortal-region-occurrence-face)))))))))
-
-(define-minor-mode mortal-region-occurrence-mode
-  "Highlight occurrences of the marked region in all windows; unhighlight when unmarked."
-  :lighter " RegHi"
-  :global t
-  (if mortal-region-occurrence-mode
-      (add-hook 'post-command-hook #'mortal/region-highlight-update)
-    (remove-hook 'post-command-hook #'mortal/region-highlight-update)
-    (dolist (buf (buffer-list))
-      (mortal/region-clear-overlays buf))))
-
-(mortal-region-occurrence-mode 1)
-
-
 
 ;; hide minor modes
 (setq mode-line-collapse-minor-modes
@@ -256,8 +211,7 @@
         which-key-mode
         company-mode
         completion-preview-mode
-        hs-minor-mode
-        mortal-region-occurrence-mode))
+        hs-minor-mode))
 
 
 ;; folding
