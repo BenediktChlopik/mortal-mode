@@ -1,17 +1,6 @@
 ;; -*- lexical-binding: t; -*-
 
 
-(defun mortal/copy-line-or-region ()
-  "Copy the active region, or the current line with its preceding newline."
-  (interactive)
-  (if (use-region-p)
-      (copy-region-as-kill (region-beginning) (region-end))
-    (copy-region-as-kill (max (point-min) (1- (line-beginning-position)))
-                         (line-end-position))
-    (end-of-line)))
-
-
-
 (defun mortal/move-line-up ()
   "Move the current line up and keep it selected if it was.
 If a region is active, move all marked lines up instead."
@@ -57,19 +46,11 @@ If a region is active, move all marked lines down instead."
           (setq deactivate-mark nil))))))
 
 
+
 (defun mortal/delete-line ()
   "Delete the current line, including its trailing newline."
   (interactive)
   (delete-region (line-beginning-position) (1+ (line-end-position))))
-
-
-(defun mortal/kill-line-or-region ()
-  "Kill the active region, or the whole current line if no region is active."
-  (interactive)
-  (if (use-region-p)
-      (kill-region (region-beginning) (region-end))
-    (kill-region (line-beginning-position) (line-beginning-position 2))))
-
 
 
 (defun mortal/insert-line-below ()
@@ -79,16 +60,31 @@ If a region is active, move all marked lines down instead."
   (newline-and-indent))
 
 
+(defun mortal/copy-line-or-region ()
+  "Copy the active region, or the current line with its preceding newline."
+  (interactive)
+  (if (use-region-p)
+      (copy-region-as-kill (region-beginning) (region-end))
+    (copy-region-as-kill (max (point-min) (1- (line-beginning-position)))
+                         (line-end-position))
+    (end-of-line)))
+
+(defun mortal/kill-line-or-region ()
+  "Kill the active region, or the whole current line if no region is active."
+  (interactive)
+  (if (use-region-p)
+      (kill-region (region-beginning) (region-end))
+    (kill-region (line-beginning-position) (line-beginning-position 2))))
+
 
 (require 'delsel)
 (defun mortal/quit ()
-  "Quit the current operation or exit the minibuffer."
+  "Replicate vanilla C-g behavior."
   (interactive)
-  (if (active-minibuffer-window)
-        (select-window (active-minibuffer-window))
-        (minibuffer-keyboard-quit))
-    (keyboard-quit))
-
+  (cond
+   ((bound-and-true-p isearch-mode) (isearch-abort))
+   ((> (minibuffer-depth) 0) (minibuffer-keyboard-quit))
+   (t (keyboard-quit))))
 
 (defun mortal/tab-line-select-tab (n)
   (interactive "n")
@@ -372,7 +368,7 @@ active region."
     
     
     (define-key map (kbd "<escape>") #'mortal/quit)
-
+    
     ;; better deletion
     (define-key map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
     (define-key map (kbd "<delete>") #'mortal/forward-delete-whitespace)
