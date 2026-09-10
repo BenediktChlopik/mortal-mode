@@ -437,7 +437,6 @@ and keep the region active/marked afterwards."
   (insert (substring-no-properties (current-kill 0))))
 
 
-
 (require 'tab-line)
 
 (defvar mortal-map
@@ -595,6 +594,7 @@ and keep the region active/marked afterwards."
     ;; zoom text
     (define-key map (kbd "C-+") #'text-scale-increase)
     (define-key map (kbd "C--") #'text-scale-decrease)
+    (define-key map (kbd "C-=") #'text-scale-set)
 
     ;; auto commenting
     (define-key map (kbd "C-;") #'mortal/comment-dwim)
