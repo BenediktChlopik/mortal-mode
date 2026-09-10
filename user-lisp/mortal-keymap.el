@@ -562,9 +562,6 @@ the current line first."
                       (interactive)
                       (mortal/tab-line-select-tab n)))))
 
-    ;; select
-    (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
-
     ;; emacs movement
     (define-key map (kbd "M-p") #'previous-line)
     (define-key map (kbd "M-n") #'next-line)
@@ -599,7 +596,7 @@ the current line first."
     ;; replace
     (define-key map (kbd "C-r") #'query-replace)
     
-    ;; auto commenting
+    ;; commenting
     (define-key map (kbd "C-;") #'mortal/comment-dwim)
     
     ;; smarter point movement
@@ -608,7 +605,11 @@ the current line first."
     
     (define-key map (kbd "C-S-<left>") #'mortal/mark-n-backward)
     (define-key map (kbd "C-S-<right>") #'mortal/mark-n-forward)
-
+    
+    ;; selection stuff
+    (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
+    (define-key map (kbd "C-SPC") #'exchange-point-and-mark)
+    
     
     map))
 
