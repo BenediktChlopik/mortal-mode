@@ -79,12 +79,29 @@ If a region is active, move all marked lines down instead."
 
 (require 'delsel)
 (defun mortal/quit ()
-  "Replicate vanilla C-g behavior."
+  "Do the right thing when quitting, mimicking `keyboard-quit' contextually.
+
+Priority mirrors how a real C-g would be dispatched by the active keymap:
+1. Inside isearch, abort the search.
+2. Inside a minibuffer, quit it (handles a stray active region there too).
+3. With an active region, just deactivate the mark instead of signalling quit.
+4. Inside a recursive edit, exit it.
+5. Otherwise, fall back to plain `keyboard-quit'."
   (interactive)
   (cond
-   ((bound-and-true-p isearch-mode) (isearch-abort))
-   ((> (minibuffer-depth) 0) (minibuffer-keyboard-quit))
+   ((bound-and-true-p isearch-mode)
+    (isearch-abort))
+   ((> (minibuffer-depth) 0)
+    (minibuffer-keyboard-quit))
+   ((region-active-p)
+    (when (boundp 'saved-region-selection)
+      (setq saved-region-selection nil))
+    (let (select-active-regions)
+      (deactivate-mark)))
+   ((> (recursion-depth) 0)
+    (exit-recursive-edit))
    (t (keyboard-quit))))
+
 
 (defun mortal/tab-line-select-tab (n)
   (interactive "n")

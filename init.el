@@ -71,7 +71,6 @@
                      (push (match-string-no-properties 0) symbols)))
                  (delete-dups symbols))))))))
 
-
 (defun mortal/treesit-completion-setup ()
   "Enable Tree-sitter completion without changing any keybindings."
   (when (treesit-parser-list)
