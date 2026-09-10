@@ -82,26 +82,31 @@ If a region is active, move all marked lines down instead."
   "Do the right thing when quitting, mimicking `keyboard-quit' contextually.
 
 Priority mirrors how a real C-g would be dispatched by the active keymap:
-1. Inside isearch, abort the search.
-2. Inside a minibuffer, quit it (handles a stray active region there too).
-3. With an active region, just deactivate the mark instead of signalling quit.
+1. If the current local keymap has its own binding for C-g (other than
+   this command), use that directly — e.g. `isearch-abort' in isearch,
+   or whatever a minibuffer/completion framework binds locally.
+2. Inside a minibuffer with no such local binding, quit it (handles a
+   stray active region there too).
+3. With an active region, just deactivate the mark instead of signalling
+   quit.
 4. Inside a recursive edit, exit it.
 5. Otherwise, fall back to plain `keyboard-quit'."
   (interactive)
-  (cond
-   ((bound-and-true-p isearch-mode)
-    (isearch-abort))
-   ((> (minibuffer-depth) 0)
-    (minibuffer-keyboard-quit))
-   ((region-active-p)
-    (when (boundp 'saved-region-selection)
-      (setq saved-region-selection nil))
-    (let (select-active-regions)
-      (deactivate-mark)))
-   ((> (recursion-depth) 0)
-    (exit-recursive-edit))
-   (t (keyboard-quit))))
-
+  (let ((cmd (lookup-key (current-local-map) (kbd "C-g"))))
+    (cond
+     ((and (commandp cmd)
+           (not (eq cmd 'mortal/quit)))
+      (call-interactively cmd))
+     ((> (minibuffer-depth) 0)
+      (minibuffer-keyboard-quit))
+     ((region-active-p)
+      (when (boundp 'saved-region-selection)
+        (setq saved-region-selection nil))
+      (let (select-active-regions)
+        (deactivate-mark)))
+     ((> (recursion-depth) 0)
+      (exit-recursive-edit))
+     (t (keyboard-quit)))))
 
 (defun mortal/tab-line-select-tab (n)
   (interactive "n")
@@ -226,20 +231,28 @@ it is expanded to cover whole lines, and stays selected as such."
 (defun mortal/newline-and-indent-current ()
   "Insert a newline without ever reindenting the previous line.
 Indent only the newly created current line.
-If in the minibuffer, just run whatever command RET is normally
-bound to there instead.
-If in a terminal/REPL-like buffer (comint, eshell, term), send
-the current input instead of inserting a newline."
+
+If in isearch, exit the search.
+If in the minibuffer, check what RET is bound to in the current
+local keymap (e.g. a completion framework's map) and use that;
+otherwise fall back to complete-and-exit/exit-minibuffer.
+Otherwise, insert a newline without reindenting the previous line,
+indenting only the newly created line."
   (interactive)
   (cond
+   (isearch-mode
+    (isearch-exit))
    ((minibufferp)
-    (minibuffer-complete-and-exit))
+    (let ((cmd (lookup-key (current-local-map) (kbd "RET"))))
+      (if (and (commandp cmd)
+               (not (eq cmd 'mortal/newline-and-indent-current)))
+          (call-interactively cmd)(if minibuffer-completion-table
+            (minibuffer-complete-and-exit)
+          (exit-minibuffer)))))
    (t
     (let (electric-indent-mode)      ; temporarily disable electric-indent's
       (newline))                     ; hooks for this one newline
     (indent-according-to-mode))))    ; indent just the line we landed on
-
-
 
 
 ;; hack for marking whole buffer without moving point, because that would move view
