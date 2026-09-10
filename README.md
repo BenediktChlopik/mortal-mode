@@ -53,9 +53,6 @@ Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and
 | `C-y` | redo |
 | `C-<return>` | insert line below |
 | `C-r` | replace |
-| `C-+` | text-scale-increase |
-| `C--` | text-scale-decrease |
-| `C-=` | text-scale-set |
 | `C-;` | comment line or region |
 | `C-<left>` |  nice move backward |
 | `C-<right>` | nice move forward |
