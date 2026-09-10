@@ -119,6 +119,7 @@ Priority mirrors how a real C-g would be dispatched by the active keymap:
   (tab-line-new-tab (list 'mouse-1)))
 
 
+
 (defun mortal/forward ()
   "Move point forward one \"smart\" step.
 
@@ -506,10 +507,18 @@ active region."
     ;; replace
     (define-key map (kbd "C-r") #'query-replace)
     
+    ;; zoom text
+    (define-key map (kbd "C-+") #'text-scale-increase)
+    (define-key map (kbd "C--") #'text-scale-decrease)
+    
+    
+    ;; future
+    
+    ;; (define-key map (kbd "C-;") #'mortal/toggle-comment-line-or-region)
+    
     ;; smarter point movement
     ;; (define-key map (kbd "C-<left>") #'mortal/backward)
     ;; (define-key map (kbd "C-<right>") #'mortal/forward)
-
     
     map))
 

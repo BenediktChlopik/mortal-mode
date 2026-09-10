@@ -224,7 +224,6 @@
 
 ;; folding
 (add-hook 'prog-mode-hook #'hs-minor-mode)
-
 (setq hs-show-indicators t)
 (setq hs-indicator-type 'fringe)
 
