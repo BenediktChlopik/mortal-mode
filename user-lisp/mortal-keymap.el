@@ -12,59 +12,49 @@
 
 
 
-(defun mortal/move-lines-vertically (direction)
-  "Move selected lines up or down and keep them selected.
-DIRECTION is the number of lines to move by: negative moves up,
-positive moves down.  The move is done with a single
-`transpose-regions' call -- the same primitive `transpose-lines'
-uses -- so Emacs records it as one atomic undo step, undoing and
-redoing cleanly even under `undo-tree-mode'."
-  (interactive "p")
-  (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
-         (end (save-excursion (goto-char (region-end))
-                               (if (bolp) (point) (line-beginning-position 2))))
-         (len (- end beg)))
-    (cond
-     ((< direction 0)
-      (let ((prev-beg (save-excursion (goto-char beg) (forward-line direction) (point))))
-        (if (= prev-beg beg)
-            (message "Can't move further up")
-          (transpose-regions prev-beg beg beg end)
-          (goto-char (+ prev-beg len))
-          (set-mark (point))
-          (goto-char prev-beg)
-          (setq deactivate-mark nil))))
-     ((> direction 0)
-      (let ((next-end (save-excursion (goto-char end) (forward-line direction) (point))))
-        (if (= next-end end)
-            (message "Can't move further down")
-          (transpose-regions beg end end next-end)
-          (goto-char next-end)
-          (set-mark (point))
-          (goto-char (- next-end len))
-          (setq deactivate-mark nil)))))))
-
 (defun mortal/move-line-up ()
-  "Move the current line up.
+  "Move the current line up and keep it selected if it was.
 If a region is active, move all marked lines up instead."
   (interactive)
-  (if (use-region-p)
-      (mortal/move-lines-vertically -1)
-    (progn
-      (transpose-lines 1)
-      (forward-line -2))))
+  (if (not (use-region-p))
+      (progn (transpose-lines 1) (forward-line -2))
+    (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
+           (end (save-excursion (goto-char (region-end))
+                                 (if (bolp) (point) (line-beginning-position 2))))
+           (prev-beg (save-excursion (goto-char beg) (forward-line -1) (point))))
+      (if (= prev-beg beg)
+          (message "Can't move further up")
+        (let ((above (buffer-substring prev-beg beg))
+              (region (buffer-substring beg end)))
+          (atomic-change-group
+            (delete-region prev-beg end)
+            (goto-char prev-beg)
+            (insert region above))
+          (set-mark (+ prev-beg (length region)))
+          (goto-char prev-beg)
+          (setq deactivate-mark nil))))))
 
 (defun mortal/move-line-down ()
-  "Move the current line down.
+  "Move the current line down and keep it selected if it was.
 If a region is active, move all marked lines down instead."
   (interactive)
-  (if (use-region-p)
-      (mortal/move-lines-vertically 1)
-    (progn
-      (forward-line 1)
-      (transpose-lines 1)
-      (forward-line -1))))
-
+  (if (not (use-region-p))
+      (progn (forward-line 1) (transpose-lines 1) (forward-line -1))
+    (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
+           (end (save-excursion (goto-char (region-end))
+                                 (if (bolp) (point) (line-beginning-position 2))))
+           (next-end (save-excursion (goto-char end) (forward-line 1) (point))))
+      (if (= next-end end)
+          (message "Can't move further down")
+        (let ((region (buffer-substring beg end))
+              (below (buffer-substring end next-end)))
+          (atomic-change-group
+            (delete-region beg next-end)
+            (goto-char beg)
+            (insert below region))
+          (goto-char (+ beg (length below) (length region)))
+          (set-mark (- (point) (length region)))
+          (setq deactivate-mark nil))))))
 
 
 (defun mortal/delete-line ()
@@ -276,6 +266,26 @@ mark, or scrolling the window."
 
 
 
+(defun mortal/undo ()
+  "Call `undo', ignoring any active region.
+Emacs's `undo' restricts itself to changes within the region
+when one is active (`undo-in-region'); this deactivates the
+mark first so undo always applies to the whole buffer."
+  (interactive)
+  (when (use-region-p)
+    (deactivate-mark))
+  (undo))
+
+(defun mortal/redo ()
+  "Call `undo-redo', ignoring any active region.
+Mirrors `mortal/undo': deactivates the mark first so redo always
+applies to the whole buffer instead of being restricted by an
+active region."
+  (interactive)
+  (when (use-region-p)
+    (deactivate-mark))
+  (undo-redo))
+
 
 (require 'tab-line)
 
@@ -428,8 +438,8 @@ mark, or scrolling the window."
     (define-key map (kbd "C-n") #'mortal/tab-line-new-tab-menu)
 
     ;; undo / redo
-    (define-key map (kbd "C-z") #'undo)
-    (define-key map (kbd "C-y") #'undo-redo)
+    (define-key map (kbd "C-z") #'mortal/undo)
+    (define-key map (kbd "C-y") #'mortal/redo)
 
     ;; insert new line
     (define-key map (kbd "C-<return>") #'mortal/insert-line-below)

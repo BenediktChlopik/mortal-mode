@@ -129,8 +129,7 @@
 
 ;; show emacs special buffers in a nice side bar
 (setq display-buffer-alist
-      `(("\\*shell\\*" nil)
-        ("\\*.*\\*"
+      `(("\\*.*\\*"
          (display-buffer-in-side-window)
          (side . right)
          (window-width . 0.25)
@@ -204,8 +203,6 @@
 
 
 
-
-
 ;; highlight occurences
 (defface mortal-region-occurrence-face
   '((t :background "#2e2e2e" :foreground unspecified))
@@ -270,6 +267,7 @@
 (setq hs-show-indicators t)
 (setq hs-indicator-type 'fringe)
 
+
 ;; eglot
 (use-package eglot
   :ensure t)
@@ -278,6 +276,7 @@
 ;; flymake
 (add-hook 'prog-mode-hook #'flymake-mode)
 (add-hook 'prog-mode-hook #'eglot-ensure)
+
 
 ;; right click context of all possible commands at point
 (context-menu-mode 1)
