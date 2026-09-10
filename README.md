@@ -9,8 +9,7 @@ Green: ALT
 ```
 cd ~
 rm -rf .emacs.d/
-git clone https://github.com/BenediktChlopik/mortal-mode.git
-mv mortal-mode .emacs.d/
+git clone https://github.com/BenediktChlopik/mortal-mode.git .emacs.d
 ```
 
 I’ve used this config for a few months, and it’s becoming really close to the modern text editor experience. Contributions are welcome, but I’ll keep this config vanilla.
