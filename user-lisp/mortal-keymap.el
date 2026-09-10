@@ -125,8 +125,8 @@ Priority mirrors how a real C-g would be dispatched by the active keymap:
 Rules:
 
 1. If point is right before a character string (a contiguous run of
-   non-whitespace characters), first skip forward over the whole string, and then run over
-   tabs/spaces after that.
+   non-whitespace characters), first skip forward over the whole string,
+   and then run over tabs/spaces after that.
 
 2. While skipping that whitespace, do NOT cross a newline: if the
    whitespace run is the line's trailing whitespace (i.e. consuming
@@ -513,8 +513,8 @@ active region."
     (define-key map (kbd "C-r") #'query-replace)
     
     ;; smarter point movement
-    (define-key map (kbd "C-<left>") #'mortal/backward)
-    (define-key map (kbd "C-<right>") #'mortal/forward)
+    ;; (define-key map (kbd "C-<left>") #'mortal/backward)
+    ;; (define-key map (kbd "C-<right>") #'mortal/forward)
 
     
     map))
