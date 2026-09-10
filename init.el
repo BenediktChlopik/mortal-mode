@@ -135,8 +135,8 @@
          (dedicated . t)
          (preserve-size . (t . nil))
          (body-function . ,(lambda (window)
-                              (with-current-buffer (window-buffer window)
-                                (tab-line-mode -1)))))))
+                             (with-current-buffer (window-buffer window)
+                               (tab-line-mode -1)))))))
 
 ;; editing modes
 (delete-selection-mode 1)
@@ -202,7 +202,6 @@
 
 
 
-
 ;; hide minor modes
 (setq mode-line-collapse-minor-modes
       '(eldoc-mode
@@ -231,7 +230,7 @@
 (add-hook 'prog-mode-hook #'eglot-ensure)
 
 
-;; right click context of all possible commands at point
+;; right click context menu
 (context-menu-mode 1)
 
 ;; focus frames

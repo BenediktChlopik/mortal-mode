@@ -9,7 +9,7 @@ If a region is active, move all marked lines up instead."
       (progn (transpose-lines 1) (forward-line -2))
     (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
            (end (save-excursion (goto-char (region-end))
-                                 (if (bolp) (point) (line-beginning-position 2))))
+                                (if (bolp) (point) (line-beginning-position 2))))
            (prev-beg (save-excursion (goto-char beg) (forward-line -1) (point))))
       (if (= prev-beg beg)
           (message "Can't move further up")
@@ -31,7 +31,7 @@ If a region is active, move all marked lines down instead."
       (progn (forward-line 1) (transpose-lines 1) (forward-line -1))
     (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
            (end (save-excursion (goto-char (region-end))
-                                 (if (bolp) (point) (line-beginning-position 2))))
+                                (if (bolp) (point) (line-beginning-position 2))))
            (next-end (save-excursion (goto-char end) (forward-line 1) (point))))
       (if (= next-end end)
           (message "Can't move further down")
@@ -137,7 +137,7 @@ Rules:
    between point and the end of the line), then this call crosses
    the newline and lands at the tab indent of the next line."
   (interactive)
-)
+  )
 
 (defun mortal/backward ()
   "Move point backward one \"smart\" step.
@@ -157,7 +157,7 @@ Rules:
    between point and the end of the line), then this call crosses
    the newline and lands at the end of of the previous line."
   (interactive)
-)
+  )
 
 
 (defun mortal/forward-delete-whitespace ()
@@ -287,8 +287,8 @@ indenting only the newly created line."
       (if (and (commandp cmd)
                (not (eq cmd 'mortal/newline-and-indent-current)))
           (call-interactively cmd)(if minibuffer-completion-table
-            (minibuffer-complete-and-exit)
-          (exit-minibuffer)))))
+                                      (minibuffer-complete-and-exit)
+                                    (exit-minibuffer)))))
    (t
     (let (electric-indent-mode)      ; temporarily disable electric-indent's
       (newline))                     ; hooks for this one newline
@@ -299,37 +299,35 @@ indenting only the newly created line."
 
 (require 'cl-lib)
 
-(defvar mortal/tsr--overlay nil)
-
-(defun mortal/tsr--cleanup-overlay ()
-  (when (overlayp mortal/tsr--overlay)
-    (delete-overlay mortal/tsr--overlay))
-  (setq mortal/tsr--overlay nil))
-
-(defun mortal/tsr--pre-command ()
-  "Run the next command as if the whole buffer were the active region,
-without ever moving point, mark, or scrolling the window."
-  (remove-hook 'pre-command-hook #'mortal/tsr--pre-command t)
-  (mortal/tsr--cleanup-overlay)
-  (cl-letf (((symbol-function 'region-beginning) (lambda () (point-min)))
-            ((symbol-function 'region-end)       (lambda () (point-max)))
-            ((symbol-function 'use-region-p)     (lambda () t))
-            ((symbol-function 'region-active-p)  (lambda () t))
-            (mark-active t))
-    (call-interactively this-command))
-  (setq this-command 'ignore))
-
 (defun mortal/temp-select-all-dispatch ()
-  "Visually mark the whole buffer with an overlay and arrange for the
-next command to act on it as the region -- all without moving point,
-mark, or scrolling the window."
+  "Visually mark the whole buffer and make the next command act on it.
+Point, mark, and window scrolling are left unchanged."
   (interactive)
-  (mortal/tsr--cleanup-overlay)
-  (setq mortal/tsr--overlay (make-overlay (point-min) (point-max)))
-  (overlay-put mortal/tsr--overlay 'face 'region)
-  (overlay-put mortal/tsr--overlay 'priority 1000)
-  (add-hook 'pre-command-hook #'mortal/tsr--pre-command nil t))
+  (let* ((overlay (make-overlay (point-min) (point-max)))
+         (next-command-fn nil))
+    (overlay-put overlay 'face 'region)
+    (overlay-put overlay 'priority 1000)
+    
+    (setq next-command-fn
+          (lambda ()
+            (remove-hook 'pre-command-hook next-command-fn t)
+            (delete-overlay overlay)
 
+            (cl-letf (((symbol-function 'region-beginning)
+                       (lambda () (point-min)))
+                      ((symbol-function 'region-end)
+                       (lambda () (point-max)))
+                      ((symbol-function 'use-region-p)
+                       (lambda () t))
+                      ((symbol-function 'region-active-p)
+                       (lambda () t))
+                      (mark-active t))
+              (call-interactively this-command))
+            
+            ;; Prevent Emacs from executing the command a second time.
+            (setq this-command 'ignore)))
+    
+    (add-hook 'pre-command-hook next-command-fn nil t)))
 
 
 (defun mortal/undo ()
@@ -436,9 +434,7 @@ active region."
     (define-key map (kbd "C-M-y") #'undefined)
     (define-key map (kbd "C-M-z") #'undefined)
     
-    
     (define-key map (kbd "<escape>") #'mortal/quit)
-    
     
     ;; better deletion
     (define-key map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
