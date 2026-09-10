@@ -20,7 +20,7 @@ Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and
 | Key | Command |
 |---|---|
 | `<escape>` | quit out of anything |
-| `<backspace>` | deleting all whitespaces or one char |
+| `<backspace>` | deleting all whitespace or one char |
 | `<delete>` | same as above |
 | `<tab>` | smartly indent |
 | `<backtab>` | smartly unindent |
@@ -32,19 +32,19 @@ Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and
 | `C-f` | `search-map` (prefix) |
 | `M-<left>` | switch to previous tab |
 | `M-<right>` | switch to next tab |
-| `C-w` | close-tab |
+| `C-w` | close tab |
 | `C-b` | speedbar |
 | `M-1` … `M-9` | select tab N |
-| `C-a` | mark whole buffer !without moving point! |
+| `C-a` | mark whole buffer (without moving point) |
 | `M-p` | previous line |
 | `M-n` | next line |
 | `M-f` | forward char |
 | `M-b` | backward char |
 | `M-<up>` | move line/region up |
 | `M-<down>` | move line/region down |
-| `C-k` | delete-line |
-| `C-x` | cut line or region |
-| `C-c` | copy line or region |
+| `C-k` | delete line |
+| `C-x` | cut line/region |
+| `C-c` | copy line/region |
 | `C-v` | plain paste |
 | `C-s` | save buffer |
 | `C-o` | find file |
@@ -58,8 +58,8 @@ Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and
 | `C-<right>` | nice move forward |
 | `C-S-<left>` | mark-n-backward |
 | `C-S-<right>` | mark-n-forward |
-| `<page-up>` | next which key page |
-| `<page-down>` | previous which key page |
+| `<page-up>` | next which-key page |
+| `<page-down>` | previous which-key page |
 | `C-<space>` | exchange point and mark position |
 
 
