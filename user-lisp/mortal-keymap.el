@@ -119,8 +119,46 @@ Priority mirrors how a real C-g would be dispatched by the active keymap:
   (tab-line-new-tab (list 'mouse-1)))
 
 
-(defun mortal/forward ()) ;; todo, should behave like kate Ctrl-right
-(defun mortal/backward ()) ;; todo, should behave like kate Ctrl-left
+(defun mortal/forward ()
+  "Move point forward one \"smart\" step.
+
+Rules:
+
+1. If point is right before a character string (a contiguous run of
+   non-whitespace characters), first skip forward over the whole string, and then run over
+   tabs/spaces after that.
+
+2. While skipping that whitespace, do NOT cross a newline: if the
+   whitespace run is the line's trailing whitespace (i.e. consuming
+   it would put point at the end of the line), stop right before
+   that trailing whitespace instead.
+
+3. If point is already at such a stop (only tabs/spaces, or nothing,
+   between point and the end of the line), then this call crosses
+   the newline and lands at the tab indent of the next line."
+  (interactive)
+)
+
+(defun mortal/backward ()
+  "Move point backward one \"smart\" step.
+
+Rules:
+
+1. If point is right after a character string (a contiguous run of
+   non-whitespace characters), first skip backward over that whole
+   string, then over the run of tabs/spaces immediately before it.
+
+2. While skipping that whitespace, do NOT cross a newline: if the
+   whitespace run is the line's leading indentation (i.e. consuming
+   it would put point at the beginning of the line), stop right
+   after the indentation instead - this is the \"tab indent\" stop.
+
+3. If point is already at such a stop (only tabs/spaces, or nothing,
+   between point and the end of the line), then this call crosses
+   the newline and lands at the end of of the previous line."
+  (interactive)
+)
+
 
 (defun mortal/forward-delete-whitespace ()
   "If a region is active, delete it.  Otherwise delete whitespace
@@ -170,6 +208,7 @@ usual way."
         (setq start (point)))
       (delete-region start (point))
       (when blank-prev (indent-according-to-mode))))))
+
 
 
 (defun mortal/current-indent-offset ()
@@ -400,6 +439,7 @@ active region."
     
     (define-key map (kbd "<escape>") #'mortal/quit)
     
+    
     ;; better deletion
     (define-key map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
     (define-key map (kbd "<delete>") #'mortal/forward-delete-whitespace)
@@ -417,11 +457,9 @@ active region."
 
     ;; which key binds
     (dolist (entry (accessible-keymaps global-map))
-      (let ((map (cdr entry)))
-        (unless (lookup-key map (kbd "<next>"))
-          (define-key map (kbd "<next>") #'which-key-show-next-page-cycle))
-        (unless (lookup-key map (kbd "<prior>"))
-          (define-key map (kbd "<prior>") #'which-key-show-previous-page-cycle))))
+      (let ((map (cdr entry))) ;; double entry in which key menu
+        (define-key map (kbd "<next>") #'which-key-show-next-page-cycle) 
+        (define-key map (kbd "<prior>") #'which-key-show-previous-page-cycle)))
 
     ;; tab management
     (define-key map (kbd "M-<left>") #'tab-line-switch-to-prev-tab)
@@ -473,6 +511,11 @@ active region."
 
     ;; replace
     (define-key map (kbd "C-r") #'query-replace)
+    
+    ;; smarter point movement
+    (define-key map (kbd "C-<left>") #'mortal/backward)
+    (define-key map (kbd "C-<right>") #'mortal/forward)
+
     
     map))
 
