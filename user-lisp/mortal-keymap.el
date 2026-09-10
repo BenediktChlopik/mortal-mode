@@ -119,37 +119,14 @@ Priority mirrors how a real C-g would be dispatched by the active keymap:
   (tab-line-new-tab (list 'mouse-1)))
 
 
-
-(defun mortal/backward-delete-whitespace ()
-  "If a region is active, delete it.  Otherwise delete whitespace
-around point, crossing at most one newline: if a newline is
-crossed and the previous line was blank, reindent according to
-mode; if no whitespace surrounds point, delete one character the
-usual way."
-  (interactive "*")
-  (cond
-   ((use-region-p)
-    (delete-region (region-beginning) (region-end)))
-   ((not (looking-back "[ \t\n]" 1))
-    (backward-delete-char-untabify 1))
-   (t
-    (let (start blank-prev)
-      (save-excursion
-        (skip-chars-backward " \t")
-        (when (eq (char-before) ?\n)
-          (backward-char)
-          (skip-chars-backward " \t")
-          (setq blank-prev (bolp)))
-        (setq start (point)))
-      (delete-region start (progn (skip-chars-forward " \t") (point)))
-      (when blank-prev (indent-according-to-mode))))))
-
+(defun mortal/forward ()) ;; todo, should behave like kate Ctrl-right
+(defun mortal/backward ()) ;; todo, should behave like kate Ctrl-left
 
 (defun mortal/forward-delete-whitespace ()
   "If a region is active, delete it.  Otherwise delete whitespace
-around point, crossing at most one newline: if a newline is
+after point, crossing at most one newline: if a newline is
 crossed and the next line was blank, reindent according to
-mode; if no whitespace surrounds point, delete one character the
+mode; if no whitespace follows point, delete one character the
 usual way."
   (interactive "*")
   (cond
@@ -166,9 +143,33 @@ usual way."
           (skip-chars-forward " \t")
           (setq blank-next (eolp)))
         (setq end (point)))
-      (delete-region (progn (skip-chars-backward " \t") (point)) end)
+      (delete-region (point) end)
       (when blank-next (indent-according-to-mode))))))
 
+
+(defun mortal/backward-delete-whitespace ()
+  "If a region is active, delete it.  Otherwise delete whitespace
+before point, crossing at most one newline: if a newline is
+crossed and the previous line was blank, reindent according to
+mode; if no whitespace precedes point, delete one character the
+usual way."
+  (interactive "*")
+  (cond
+   ((use-region-p)
+    (delete-region (region-beginning) (region-end)))
+   ((not (looking-back "[ \t\n]" 1))
+    (backward-delete-char-untabify 1))
+   (t
+    (let (start blank-prev)
+      (save-excursion
+        (skip-chars-backward " \t")
+        (when (eq (char-before) ?\n)
+          (backward-char)
+          (skip-chars-backward " \t")
+          (setq blank-prev (bolp)))
+        (setq start (point)))
+      (delete-region start (point))
+      (when blank-prev (indent-according-to-mode))))))
 
 
 (defun mortal/current-indent-offset ()
