@@ -412,7 +412,8 @@ active region."
 
 (defun mortal/comment-dwim ()
   "Like `comment-dwim', but expand a half-marked region to whole lines first,
-and keep the region active/marked afterwards."
+and keep the region active/marked afterwards. If nothing is marked, mark
+the current line first."
   (interactive "*")
   (if (and (use-region-p)
            (not (eq (region-beginning) (region-end))))
@@ -429,7 +430,13 @@ and keep the region active/marked afterwards."
         ;; force it back on with the (possibly shifted) bounds.
         (setq deactivate-mark nil)
         (activate-mark))
-    (comment-dwim nil)))
+    (let ((beg (line-beginning-position))
+          (end (line-end-position)))
+      (goto-char beg)
+      (push-mark end nil t)
+      (comment-dwim nil)
+      (setq deactivate-mark nil)
+      (activate-mark))))
 
 
 (defun mortal/yank-plain ()
