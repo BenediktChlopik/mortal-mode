@@ -274,6 +274,10 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (setq mark-active t))
 
 
+(defun mortal/treesitter-move-parent ()
+  "C-<up>/ C-<down> movements, todo"
+  )
+
 
 (defun mortal/forward-delete-whitespace ()
   "If a region is active, delete it.  Otherwise delete whitespace
