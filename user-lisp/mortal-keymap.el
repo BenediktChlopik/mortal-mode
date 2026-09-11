@@ -217,6 +217,23 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (interactive)
   (mortal/mark-move -1))
 
+(defun mortal/mark-forward-char ()
+  "Move forward one character, extending the region if active."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (forward-char 1)
+  (setq mark-active t))
+
+(defun mortal/mark-backward-char ()
+  "Move backward one character, extending the region if active."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (backward-char 1)
+  (setq mark-active t))
+
+
 
 
 (defun mortal/forward-delete-whitespace ()
@@ -615,6 +632,9 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "C-S-<right>") #'mortal/mark-n-forward-word)
     
     ;; selection stuff
+    (define-key map (kbd "S-<left>") #'mortal/mark-backward-char)
+    (define-key map (kbd "S-<right>") #'mortal/mark-forward-char)
+    
     (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
     (define-key map (kbd "C-SPC") #'exchange-point-and-mark)
 
