@@ -130,10 +130,11 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
    ([A-Za-z0-9]), special characters (everything else except
    tabs/spaces/newline), and whitespace (tabs/spaces).
 
-2. If point is right before a character string (i.e. not sitting on
-   whitespace), a step always crosses two of those three groups: it
-   skips over the run of the group at point, and then continues and
-   skips over the following run, that belongs to a different group.
+2. If point is not already at a \"stop\" (see rule 4), a step always
+   crosses two of those three groups: it skips over the run of the
+   group at point, and then continues and skips over the following
+   run, that belongs to a different group. This applies whether the
+   group at point is a word/special run or a whitespace run.
 
 3. While crossing that second group, do NOT cross a newline: if the
    second group is whitespace and it is the line's trailing
@@ -151,10 +152,6 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
                      (if (> dir 0)
                          (looking-at "[ \t]*$")
                        (looking-back "^[ \t]*" (line-beginning-position)))))
-        (on-ws-p (lambda ()
-                   (if (> dir 0)
-                       (looking-at "[ \t]")
-                     (looking-back "[ \t]" (1- (point))))))
         (class-at (lambda ()
                     ;; Class of the character adjacent to point in DIR:
                     ;; 'word, 'special, 'ws, or nil (newline / buffer edge).
@@ -184,17 +181,14 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
         (when (zerop (forward-line -1))
           (end-of-line)
           (skip-chars-backward " \t"))))
-     ;; Sitting on non-trailing whitespace -> just cross it.
-     ((funcall on-ws-p)
-      (funcall skip " \t"))
-     ;; Rules 1-3: cross two of the three groups.
+     ;; Rules 1-3: cross two of the three groups, whichever class
+     ;; (word/special/ws) point currently sits in.
      (t
       (let ((c1 (funcall class-at)))
         (funcall skip (funcall class-chars c1))
         (let ((c2 (funcall class-at)))
           (when (and c2 (not (funcall at-edge-p)))
             (funcall skip (funcall class-chars c2)))))))))
-
 
 
 (defun mortal/forward-word ()
@@ -445,10 +439,16 @@ the current line first."
       (activate-mark))))
 
 (defun mortal/yank-plain ()
+  "Yank plain text, replacing the active region.
+Add a trailing newline when yanking multiline text."
   (interactive)
-  (when (use-region-p)
-    (delete-region (region-beginning) (region-end)))
-  (insert (substring-no-properties (current-kill 0))))
+  (let ((text (substring-no-properties (current-kill 0))))
+    (when (use-region-p)
+      (delete-region (region-beginning) (region-end)))
+    (insert text)
+    (when (and (>= (cl-count ?\n text) 2)
+               (not (string-suffix-p "\n" text)))
+      (insert "\n"))))
 
 
 (require 'tab-line)
