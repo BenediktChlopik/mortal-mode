@@ -120,6 +120,7 @@ Priority mirrors how a real C-g would be dispatched by the active keymap:
 
 
 
+
 (defun mortal/move (dir)
   "Move point one \"smart\" step in DIR (1 = forward, -1 = backward).
 
@@ -132,10 +133,7 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
 2. If point is right before a character string (i.e. not sitting on
    whitespace), a step always crosses two of those three groups: it
    skips over the run of the group at point, and then continues and
-   skips over the following run too, even if that run belongs to a
-   different group (e.g. word characters into special characters, or
-   the reverse). It does NOT stop merely because the character class
-   changed.
+   skips over the following run, that belongs to a different group.
 
 3. While crossing that second group, do NOT cross a newline: if the
    second group is whitespace and it is the line's trailing
@@ -175,11 +173,17 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
     (cond
      ;; Rule 4: already at a stop -> cross the newline.
      ((funcall at-edge-p)
-      (forward-line dir)
       (if (> dir 0)
-          (skip-chars-forward " \t")
-        (end-of-line)
-        (skip-chars-backward " \t")))
+          (progn
+            (forward-line 1)
+            (skip-chars-forward " \t"))
+        ;; forward-line returns 0 only if it actually reached a
+        ;; previous line; on failure (already on the buffer's first
+        ;; line) point is correctly left at point-min, so don't go
+        ;; hunting for "end of line" in that case.
+        (when (zerop (forward-line -1))
+          (end-of-line)
+          (skip-chars-backward " \t"))))
      ;; Sitting on non-trailing whitespace -> just cross it.
      ((funcall on-ws-p)
       (funcall skip " \t"))
@@ -191,27 +195,29 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
           (when (and c2 (not (funcall at-edge-p)))
             (funcall skip (funcall class-chars c2)))))))))
 
-(defun mortal/forward ()
+
+
+(defun mortal/forward-word ()
   "Move point forward one \"smart\" step."
   (interactive)
   (mortal/move 1))
 
-(defun mortal/backward ()
+(defun mortal/backward-word ()
   "Move point backward one \"smart\" step."
   (interactive)
   (mortal/move -1))
 
-(defun mortal/mark-n-forward ()
-  "Move point forward one \"smart\" step, starting a mark region if none is active."
+(defun mortal/mark-n-forward-word ()
+  "Move point forward one smart step, activating the region if needed."
   (interactive)
-  (unless (region-active-p)
+  (unless (use-region-p)
     (push-mark (point) t t))
   (mortal/move 1))
 
-(defun mortal/mark-n-backward ()
-  "Move point backward one \"smart\" step, starting a mark region if none is active."
+(defun mortal/mark-n-backward-word ()
+  "Move point backward one smart step, activating the region if needed."
   (interactive)
-  (unless (region-active-p)
+  (unless (use-region-p)
     (push-mark (point) t t))
   (mortal/move -1))
 
@@ -442,7 +448,7 @@ the current line first."
   (interactive)
   (when (use-region-p)
     (delete-region (region-beginning) (region-end)))
-  (insert (substring-no-properties (current-kill 0)) "\n"))
+  (insert (substring-no-properties (current-kill 0))))
 
 
 (require 'tab-line)
@@ -600,15 +606,16 @@ the current line first."
     (define-key map (kbd "C-;") #'mortal/comment-dwim)
     
     ;; smarter point movement
-    (define-key map (kbd "C-<left>") #'mortal/backward)
-    (define-key map (kbd "C-<right>") #'mortal/forward)
+    (define-key map (kbd "C-<left>") #'mortal/backward-word)
+    (define-key map (kbd "C-<right>") #'mortal/forward-word)
     
-    (define-key map (kbd "C-S-<left>") #'mortal/mark-n-backward)
-    (define-key map (kbd "C-S-<right>") #'mortal/mark-n-forward)
+    (define-key map (kbd "C-S-<left>") #'mortal/mark-n-backward-word)
+    (define-key map (kbd "C-S-<right>") #'mortal/mark-n-forward-word)
     
     ;; selection stuff
     (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
     (define-key map (kbd "C-SPC") #'exchange-point-and-mark)
+
     
     
     map))

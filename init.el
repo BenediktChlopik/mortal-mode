@@ -152,9 +152,6 @@
 (setq-default indent-tabs-mode nil)
 (setq-default tab-width 4)
 
-;; selection mode
-(cua-selection-mode 1)
-
 (with-eval-after-load 'cua-base
   (define-key cua-global-keymap (kbd "C-<return>") nil))
 (show-paren-mode 1)
