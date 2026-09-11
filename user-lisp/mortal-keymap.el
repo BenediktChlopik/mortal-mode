@@ -201,19 +201,21 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (interactive)
   (mortal/move -1))
 
-(defun mortal/mark-n-forward-word ()
-  "Move point forward one smart step, activating the region if needed."
-  (interactive)
+(defun mortal/mark-move (direction)
   (unless (use-region-p)
     (push-mark (point) t t))
-  (mortal/move 1))
+  (mortal/move direction)
+  (setq mark-active t))
+
+(defun mortal/mark-n-forward-word ()
+  "Move point forward one smart step, extending the region."
+  (interactive)
+  (mortal/mark-move 1))
 
 (defun mortal/mark-n-backward-word ()
-  "Move point backward one smart step, activating the region if needed."
+  "Move point backward one smart step, extending the region."
   (interactive)
-  (unless (use-region-p)
-    (push-mark (point) t t))
-  (mortal/move -1))
+  (mortal/mark-move -1))
 
 
 
