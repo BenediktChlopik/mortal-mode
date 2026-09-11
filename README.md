@@ -70,4 +70,4 @@ All of this was written bit by bit with the help of Claude and ChatGPT. If you w
 * Package everything for MELPA
 * Make a `mortal-base-mode` that's enabled globally. If keybindings conflict, fall back to the `C-S` prefix instead of overriding the standards
 * Make a `mortal-prog-mode` that's enabled only in programming modes
-* Make a `mortal-org-mode`? Left as an exercise to the reader — I'm using Logseq
+* Make a `mortal-org-mode`?
