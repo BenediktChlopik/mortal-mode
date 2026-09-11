@@ -233,6 +233,45 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (backward-char 1)
   (setq mark-active t))
 
+(defun mortal/deselect-forward-char ()
+  "Deselect the region and move forward one character."
+  (interactive)
+  (deactivate-mark)
+  (forward-char 1))
+
+(defun mortal/deselect-backward-char ()
+  "Deselect the region and move backward one character."
+  (interactive)
+  (deactivate-mark)
+  (backward-char 1))
+
+(defun mortal/deselect-previous-line ()
+  "Move to the previous line and deselect the region."
+  (interactive)
+  (deactivate-mark)
+  (line-move -1))
+
+(defun mortal/deselect-next-line ()
+  "Move to the next line and deselect the region."
+  (interactive)
+  (deactivate-mark)
+  (line-move 1))
+
+(defun mortal/mark-previous-line ()
+  "Move to the previous line, extending the region if active."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (line-move -1)
+  (setq mark-active t))
+
+(defun mortal/mark-next-line ()
+  "Move to the next line, extending the region if active."
+  (interactive)
+  (unless (use-region-p)
+    (push-mark (point) t t))
+  (line-move 1)
+  (setq mark-active t))
 
 
 
@@ -470,6 +509,26 @@ Add a trailing newline when yanking multiline text."
       (insert "\n"))))
 
 
+(defun mortal/define-key-no-overwrite (keymap key fn)
+  "Like `define-key', but the bound command defers to a local 
+   binding for KEY, if any, else calls FN.
+
+Binds KEY in KEYMAP to a command that checks `current-local-map' at
+call time (not definition time): if that local map already has a
+binding for KEY, it runs that instead of FN.  Handy for minor-mode
+keymaps that shouldn't unconditionally shadow whatever the major
+mode (or another local keymap) already bound."
+  (define-key keymap key
+              (lambda ()
+                (interactive)
+                (let* ((local-map (current-local-map))
+                       (local-fn (and local-map (lookup-key local-map key))))
+                  (if (commandp local-fn)
+                      (call-interactively local-fn)
+                    (call-interactively fn))))))
+
+
+
 (require 'tab-line)
 
 (defvar mortal-map
@@ -632,13 +691,20 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "C-S-<right>") #'mortal/mark-n-forward-word)
     
     ;; selection stuff
+    (define-key map (kbd "<left>") #'mortal/deselect-backward-char)
+    (define-key map (kbd "<right>") #'mortal/deselect-forward-char)
+    
+    (mortal/define-key-no-overwrite map (kbd "<up>") #'mortal/deselect-previous-line)
+    (mortal/define-key-no-overwrite map (kbd "<down>") #'mortal/deselect-next-line)
+    
     (define-key map (kbd "S-<left>") #'mortal/mark-backward-char)
     (define-key map (kbd "S-<right>") #'mortal/mark-forward-char)
     
+    (define-key map (kbd "S-<up>") #'mortal/mark-previous-line)
+    (define-key map (kbd "S-<down>") #'mortal/mark-next-line)
+    
     (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
     (define-key map (kbd "C-SPC") #'exchange-point-and-mark)
-
-    
     
     map))
 
