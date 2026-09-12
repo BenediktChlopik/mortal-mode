@@ -1,5 +1,7 @@
 ;; -*- lexical-binding: t; -*-
 
+(require 'cl-lib)
+
 
 (defun mortal/move-line-up ()
   "Move the current line up and keep it selected if it was.
@@ -81,27 +83,46 @@ If a region is active, move all marked lines down instead."
 (defun mortal/quit ()
   "Do the right thing when quitting, mimicking `keyboard-quit' contextually.
 
-Priority mirrors how a real C-g would be dispatched by the active keymap:
-1. If the current local keymap has its own binding for C-g (other than
-   this command), use that directly — e.g. `isearch-abort' in isearch,
-   or whatever a minibuffer/completion framework binds locally.
-2. Inside a minibuffer with no such local binding, quit it (handles a
-   stray active region there too).
+Priority mirrors how a real C-g would actually be dispatched by Emacs:
+1. Walk the active keymaps in the same precedence Emacs itself uses for
+   key lookup (`overriding-terminal-local-map', `overriding-local-map',
+   emulation-mode-map-alists, minor-mode-overriding-map-alist,
+   minor-mode-map-alist, then the local/major-mode map) and, if any of
+   them (other than the global map) binds C-g to something other than
+   this command, run that directly.  This is what correctly catches
+   things like `isearch-abort' or a transient/repeat map's own quit
+   command, which never live in the local map.
+2. Inside a minibuffer with no such binding, quit it (handles a stray
+   active region there too, and pops one level for nested minibuffers).
 3. With an active region, just deactivate the mark instead of signalling
    quit.
 4. Inside a recursive edit, exit it.
 5. Otherwise, fall back to plain `keyboard-quit'."
   (interactive)
-  (let ((cmd (lookup-key (current-local-map) (kbd "C-g"))))
+  ;; Step 0: if a minibuffer is active but not selected (easy to hit with
+  ;; `focus-follows-mouse'/`mouse-autoselect-window', since the mouse can
+  ;; wander over another window while the minibuffer still waits for
+  ;; input), redirect both window and frame focus into it first.
+  ;; Otherwise every check below acts on the wrong buffer, and
+  ;; `minibuffer-keyboard-quit' in particular can silently no-op on some
+  ;; unrelated region instead of aborting the minibuffer.
+  (let ((minibuf (active-minibuffer-window)))
+    (when (and minibuf (not (eq (selected-window) minibuf)))
+      (select-frame-set-input-focus (window-frame minibuf))
+      (select-window minibuf)))
+  (let ((cmd (catch 'mortal/quit--found
+               (dolist (map (current-active-maps))
+                 (unless (eq map global-map)
+                   (let ((binding (lookup-key map (kbd "C-g"))))
+                     (when (and (commandp binding)
+                                (not (eq binding 'mortal/quit)))
+                       (throw 'mortal/quit--found binding)))))
+               nil)))
     (cond
-     ((and (commandp cmd)
-           (not (eq cmd 'mortal/quit)))
-      (call-interactively cmd))
+     (cmd (call-interactively cmd))
      ((> (minibuffer-depth) 0)
       (minibuffer-keyboard-quit))
      ((region-active-p)
-      (when (boundp 'saved-region-selection)
-        (setq saved-region-selection nil))
       (let (select-active-regions)
         (deactivate-mark)))
      ((> (recursion-depth) 0)
@@ -145,60 +166,54 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
 4. If point is already at such a stop (only tabs/spaces, or nothing,
    between point and the end of the line), then this call crosses
    the newline and lands at the tab indent of the next line."
-  (let ((skip (lambda (chars)
-                (if (> dir 0) (skip-chars-forward chars)
-                  (skip-chars-backward chars))))
-        (at-edge-p (lambda ()
-                     (if (> dir 0)
-                         (looking-at "[ \t]*$")
-                       (looking-back "^[ \t]*" (line-beginning-position)))))
-        (class-at (lambda ()
-                    ;; Class of the character adjacent to point in DIR:
-                    ;; 'word, 'special, 'ws, or nil (newline / buffer edge).
-                    (let ((ch (if (> dir 0) (char-after) (char-before))))
-                      (cond
-                       ((null ch) nil)
-                       ((eq ch ?\n) nil)
-                       ((string-match-p "[A-Za-z0-9]" (string ch)) 'word)
-                       ((string-match-p "[ \t]" (string ch)) 'ws)
-                       (t 'special)))))
-        (class-chars (lambda (class)
-                       (pcase class
-                         ('word "A-Za-z0-9")
-                         ('ws " \t")
-                         ('special "^A-Za-z0-9 \t\n")))))
+  (cl-labels
+      ((skip (chars)
+         (if (> dir 0) (skip-chars-forward chars)
+           (skip-chars-backward chars)))
+       (at-edge-p ()
+         (if (> dir 0)
+             (looking-at "[ \t]*$")
+           (looking-back "^[ \t]*" (line-beginning-position))))
+       (class-at ()
+         (let ((ch (if (> dir 0) (char-after) (char-before))))
+           (cond
+            ((null ch) nil)
+            ((eq ch ?\n) nil)
+            ((string-match-p "[A-Za-z0-9]" (string ch)) 'word)
+            ((string-match-p "[ \t]" (string ch)) 'ws)
+            (t 'special))))
+       (class-chars (class)
+         (pcase class
+           ('word "A-Za-z0-9")
+           ('ws " \t")
+           ('special "^A-Za-z0-9 \t\n"))))
     (cond
-     ;; Rule 4: already at a stop -> cross the newline.
-     ((funcall at-edge-p)
+     ((at-edge-p)
       (if (> dir 0)
           (progn
             (forward-line 1)
             (skip-chars-forward " \t"))
-        ;; forward-line returns 0 only if it actually reached a
-        ;; previous line; on failure (already on the buffer's first
-        ;; line) point is correctly left at point-min, so don't go
-        ;; hunting for "end of line" in that case.
         (when (zerop (forward-line -1))
           (end-of-line)
           (skip-chars-backward " \t"))))
-     ;; Rules 1-3: cross two of the three groups, whichever class
-     ;; (word/special/ws) point currently sits in.
      (t
-      (let ((c1 (funcall class-at)))
-        (funcall skip (funcall class-chars c1))
-        (let ((c2 (funcall class-at)))
-          (when (and c2 (not (funcall at-edge-p)))
-            (funcall skip (funcall class-chars c2)))))))))
+      (let ((c1 (class-at)))
+        (skip (class-chars c1))
+        (let ((c2 (class-at)))
+          (when (and c2 (not (at-edge-p)))
+            (skip (class-chars c2)))))))))
 
 
 (defun mortal/forward-word ()
   "Move point forward one \"smart\" step."
   (interactive)
+  (deactivate-mark)
   (mortal/move 1))
 
 (defun mortal/backward-word ()
   "Move point backward one \"smart\" step."
   (interactive)
+  (deactivate-mark)
   (mortal/move -1))
 
 (defun mortal/mark-move (direction)
@@ -272,11 +287,6 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
     (push-mark (point) t t))
   (line-move 1)
   (setq mark-active t))
-
-
-(defun mortal/treesitter-move-parent ()
-  "C-<up>/ C-<down> movements, todo"
-  )
 
 
 (defun mortal/forward-delete-whitespace ()
@@ -417,8 +427,6 @@ indenting only the newly created line."
 
 ;; hack for marking whole buffer without moving point, because that would move view
 
-(require 'cl-lib)
-
 (defun mortal/temp-select-all-dispatch ()
   "Visually mark the whole buffer and make the next command act on it.
 Point, mark, and window scrolling are left unchanged."
@@ -500,6 +508,7 @@ the current line first."
       (setq deactivate-mark nil)
       (activate-mark))))
 
+
 (defun mortal/yank-plain ()
   "Yank plain text, replacing the active region.
 Add a trailing newline when yanking multiline text."
@@ -511,6 +520,7 @@ Add a trailing newline when yanking multiline text."
     (when (and (>= (cl-count ?\n text) 2)
                (not (string-suffix-p "\n" text)))
       (insert "\n"))))
+
 
 
 (defun mortal/define-key-no-overwrite (keymap key fn)
