@@ -126,6 +126,7 @@
     (unless (lookup-key keymap (kbd "<prior>"))
       (define-key keymap (kbd "<prior>") #'which-key-show-previous-page-cycle))))
 
+(mortal-response-keymap-mode 1)
 
 ;; tab line
 (global-tab-line-mode 1)

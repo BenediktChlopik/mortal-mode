@@ -129,6 +129,7 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
       (exit-recursive-edit))
      (t (keyboard-quit)))))
 
+
 (defun mortal/tab-line-select-tab (n)
   (interactive "n")
   (when-let* ((buffer (nth (1- n) (tab-line-tabs-fixed-window-buffers))))
