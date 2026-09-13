@@ -14,7 +14,8 @@
 (defun mortal-jumper/pop-to-mark ()
   "Pop to mark, remembering the current location."
   (interactive)
-  (push (point) mortal-jumper--history)
+  (unless (equal (point) (car mortal-jumper--history))
+    (push (point) mortal-jumper--history))
   (call-interactively #'pop-to-mark-command))
 
 (defun mortal-jumper/jump-back ()
