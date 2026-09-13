@@ -275,37 +275,30 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (backward-char 1))
 
 
-
-(defun mortal/line-motion (direction)
-  "Move one line in DIRECTION, handling buffer boundaries."
-  (cond
-   ((< direction 0)
-    (if (<= (line-beginning-position) (point-min))
-        (goto-char (line-beginning-position))
-      (forward-line -1)))
-   ((> direction 0)
-    (if (>= (line-end-position) (point-max))
-        (goto-char (line-end-position))
-      (forward-line 1)))))
-  
 (defun mortal/deselect-previous-line ()
   "Move to the previous line and deselect the region."
   (interactive)
   (deactivate-mark)
-  (mortal/line-motion -1))
+  (condition-case nil
+      (line-move -1)
+    (beginning-of-buffer nil)))
 
 (defun mortal/deselect-next-line ()
   "Move to the next line and deselect the region."
   (interactive)
   (deactivate-mark)
-  (mortal/line-motion 1))
+  (condition-case nil
+      (line-move 1)
+    (end-of-buffer nil)))
 
 (defun mortal/mark-previous-line ()
   "Move to the previous line, extending the region if active."
   (interactive)
   (unless (use-region-p)
     (push-mark (point) t t))
-  (mortal/line-motion -1)
+  (condition-case nil
+      (line-move -1)
+    (beginning-of-buffer nil))
   (setq mark-active t))
 
 (defun mortal/mark-next-line ()
@@ -313,7 +306,9 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (interactive)
   (unless (use-region-p)
     (push-mark (point) t t))
-  (mortal/line-motion 1)
+  (condition-case nil
+      (line-move 1)
+    (end-of-buffer nil))
   (setq mark-active t))
 
 
@@ -653,6 +648,12 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "M-z") #'undefined)
     (define-key map (kbd "M-TAB") #'undefined)
     (define-key map (kbd "M-<iso-lefttab>") #'undefined)
+    (define-key map (kbd "M-<down-mouse-1>") #'undefined)
+    (define-key map (kbd "M-<mouse-1>") #'undefined)
+    (define-key map (kbd "M-<down-mouse-3>") #'undefined)
+    (define-key map (kbd "M-<mouse-3>") #'undefined)
+    (define-key map (kbd "M-<drag-mouse-1>") #'undefined)
+    (define-key map (kbd "M-<drag-mouse-3>") #'undefined)
 
     
     (define-key map (kbd "C-M-a") #'undefined)

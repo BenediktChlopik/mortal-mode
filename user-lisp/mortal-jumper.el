@@ -9,7 +9,7 @@
   "Save point and move it with mouse-1.
 Only record jump history for plain single clicks; double/triple
 clicks are word/line selections, not navigation jumps.  Passing
-`promote-to-region' to `mouse-set-point' lets it correctly extend
+promote-to-region' to mouse-set-point' lets it correctly extend
 the selection on multi-clicks instead of deactivating the mark
 that `mouse-drag-region' just set."
   (interactive "e")
