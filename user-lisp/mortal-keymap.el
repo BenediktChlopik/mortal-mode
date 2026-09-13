@@ -8,6 +8,8 @@
 (require 'delsel)
 (require 'esh-mode)
 (require 'tab-line)
+(require 'completion-preview)
+(require 'mortal-jumper)
 
 ;;; ---------------------------------------------------------------------------
 ;;; Line editing
@@ -410,36 +412,35 @@ it is expanded to cover whole lines, and stays selected as such."
       (push-mark end-marker nil t))
     (set-marker end-marker nil)))
 
+(defun mortal/complete-or-indent ()
+  "If a completion-preview ghost text is showing, accept it.
+Otherwise, if a CAPF applies, complete at point.
+Otherwise, indent."
+  (interactive)
+  (cond
+   ;; Ghost text is currently displayed — accept it.
+   ((bound-and-true-p completion-preview-active-mode)
+    (completion-preview-insert))
+   ;; No preview shown, but a completion is available — complete.
+   ((run-hook-with-args-until-success 'completion-at-point-functions)
+    (completion-at-point))
+   ;; Nothing to complete — just indent.
+   (t
+    (indent-for-tab-command))))
+
+
+
 ;;; ---------------------------------------------------------------------------
 ;;; Newline handling
 ;;; ---------------------------------------------------------------------------
 
 (defun mortal/newline-and-indent-current ()
   "Insert a newline without ever reindenting the previous line.
-Indent only the newly created current line.
-
-If in isearch, exit the search.
-If in the minibuffer, check what RET is bound to in the current
-local keymap (e.g. a completion framework's map) and use that;
-otherwise fall back to complete-and-exit/exit-minibuffer.
-Otherwise, insert a newline without reindenting the previous line,
-indenting only the newly created line."
+Indent only the newly created current line."
   (interactive)
-  (cond
-   (isearch-mode
-    (isearch-exit))
-   ((minibufferp)
-    (let ((cmd (lookup-key (current-local-map) (kbd "RET"))))
-      (if (and (commandp cmd)
-               (not (eq cmd 'mortal/newline-and-indent-current)))
-          (call-interactively cmd)
-        (if minibuffer-completion-table
-            (minibuffer-complete-and-exit)
-          (exit-minibuffer)))))
-   (t
-    (let (electric-indent-mode)      ; temporarily disable electric-indent's
-      (newline))                     ; hooks for this one newline
-    (indent-according-to-mode))))    ; indent just the line we landed on
+  (let (electric-indent-mode)      ; temporarily disable electric-indent's
+    (newline))                     ; hooks for this one newline
+  (indent-according-to-mode))      ; indent just the line we landed on
 
 ;;; ---------------------------------------------------------------------------
 ;;; Select all
@@ -554,22 +555,25 @@ Add a trailing newline when yanking multiline text."
 ;;; ---------------------------------------------------------------------------
 
 (defun mortal/define-key-no-overwrite (keymap key fn)
-  "Like `define-key', but the bound command defers to a local
-   binding for KEY, if any, else calls FN.
+  "Like `define-key', but the bound command defers to whatever
+KEY is *actually* bound to elsewhere in the active keymap set.
 
-Binds KEY in KEYMAP to a command that checks `current-local-map' at
-call time (not definition time): if that local map already has a
-binding for KEY, it runs that instead of FN.  Handy for minor-mode
-keymaps that shouldn't unconditionally shadow whatever the major
-mode (or another local keymap) already bound."
-  (define-key keymap key
-              (lambda ()
-                (interactive)
-                (let* ((local-map (current-local-map))
-                       (local-fn (and local-map (lookup-key local-map key))))
-                  (if (commandp local-fn)
-                      (call-interactively local-fn)
-                    (call-interactively fn))))))
+Temporarily removes its own binding in KEYMAP while looking up KEY,
+so `key-binding' can see past it to lower-precedence maps (e.g.
+`vertico-map' or `completion-preview-active-mode-map') instead of
+just finding itself. Falls back to FN only if nothing else claims KEY."
+  (let (self)
+    (setq self
+          (lambda ()
+            (interactive)
+            (define-key keymap key nil)
+            (unwind-protect
+                (let ((other-fn (key-binding key t)))
+                  (if (commandp other-fn)
+                      (call-interactively other-fn)
+                    (call-interactively fn)))
+              (define-key keymap key self))))
+    (define-key keymap key self)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap definition
@@ -577,7 +581,7 @@ mode (or another local keymap) already bound."
 
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
-    ;; undefine C-*, M-*, and C-M-* besides C-i, C-m.
+    ;; undefine C-*, M-*, and C-M-*
     (define-key map (kbd "C-a") #'undefined)
     (define-key map (kbd "C-b") #'undefined)
     (define-key map (kbd "C-c") #'undefined)
@@ -586,9 +590,11 @@ mode (or another local keymap) already bound."
     (define-key map (kbd "C-f") #'undefined)
     (define-key map (kbd "C-g") #'undefined)
     (define-key map (kbd "C-h") #'undefined)
+    (define-key map (kbd "C-i") #'undefined)
     (define-key map (kbd "C-j") #'undefined)
     (define-key map (kbd "C-k") #'undefined)
     (define-key map (kbd "C-l") #'undefined)
+    (define-key map (kbd "C-m") #'undefined)
     (define-key map (kbd "C-n") #'undefined)
     (define-key map (kbd "C-o") #'undefined)
     (define-key map (kbd "C-p") #'undefined)
@@ -629,7 +635,10 @@ mode (or another local keymap) already bound."
     (define-key map (kbd "M-x") #'undefined)
     (define-key map (kbd "M-y") #'undefined)
     (define-key map (kbd "M-z") #'undefined)
+    (define-key map (kbd "M-<tab>") #'undefined)
+    (define-key map (kbd "M-S-<tab>") #'undefined)
 
+    
     (define-key map (kbd "C-M-a") #'undefined)
     (define-key map (kbd "C-M-b") #'undefined)
     (define-key map (kbd "C-M-c") #'undefined)
@@ -666,8 +675,17 @@ mode (or another local keymap) already bound."
 
     ;; indent behaviour
     (define-key map (kbd "<backtab>") #'mortal/unindent-line-or-region)
-    (define-key map (kbd "RET") #'mortal/newline-and-indent-current)
+    (mortal/define-key-no-overwrite map (kbd "<tab>") #'mortal/complete-or-indent)
+    (mortal/define-key-no-overwrite map (kbd "RET") #'mortal/newline-and-indent-current)
+    
+    ;; completion cycling
+    (define-key map (kbd "M-<tab>") #'completion-preview-next-candidate)
+    (define-key map (kbd "M-S-<tab>") #'completion-preview-prev-candidate)
 
+    ;; jumping
+    (define-key map (kbd "M-,") #'mortal-jumper/pop-to-mark)
+    (define-key map (kbd "M-.") #'mortal-jumper/jump-back)
+    
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)
     (define-key map (kbd "<f2>") help-map)
