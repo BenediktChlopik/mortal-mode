@@ -42,29 +42,6 @@
 
 
 ;;; ---------------------------------------------------------------------------
-;;; Mortal mode
-;;; ---------------------------------------------------------------------------
-
-(defgroup mortal nil
-  "Mortal Emacs configuration."
-  :group 'emacs)
-
-(define-minor-mode mortal-mode
-  "A minor mode for mortal-related keybindings."
-  :lighter " Mortal"
-  :keymap mortal-map
-  :global t
-  :group 'mortal)
-
-(add-to-list 'emulation-mode-map-alists
-             `((mortal-mode . ,mortal-map)))
-
-(mortal-mode 1)
-
-(mortal-response-keymap-mode 1)
-
-
-;;; ---------------------------------------------------------------------------
 ;;; Theme / appearance
 ;;; ---------------------------------------------------------------------------
 
@@ -346,6 +323,30 @@
 
 (setq focus-follows-mouse t
       mouse-autoselect-window t)
+
+
+;;; ---------------------------------------------------------------------------
+;;; Mortal mode
+;;; ---------------------------------------------------------------------------
+
+(defgroup mortal nil
+  "Mortal Emacs configuration."
+  :group 'emacs)
+
+(define-minor-mode mortal-mode
+  "A minor mode for mortal-related keybindings."
+  :lighter " Mortal"
+  :keymap mortal-map
+  :global t
+  :group 'mortal)
+
+(add-to-list 'emulation-mode-map-alists
+             `((mortal-mode . ,mortal-map)))
+
+(mortal-mode 1)
+
+(mortal-response-keymap-mode 1)
+
 
 
 ;;; ---------------------------------------------------------------------------

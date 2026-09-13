@@ -555,25 +555,18 @@ Add a trailing newline when yanking multiline text."
 ;;; ---------------------------------------------------------------------------
 
 (defun mortal/define-key-no-overwrite (keymap key fn)
-  "Like `define-key', but the bound command defers to whatever
-KEY is *actually* bound to elsewhere in the active keymap set.
-
-Temporarily removes its own binding in KEYMAP while looking up KEY,
-so `key-binding' can see past it to lower-precedence maps (e.g.
-`vertico-map' or `completion-preview-active-mode-map') instead of
-just finding itself. Falls back to FN only if nothing else claims KEY."
-  (let (self)
-    (setq self
-          (lambda ()
-            (interactive)
-            (define-key keymap key nil)
-            (unwind-protect
-                (let ((other-fn (key-binding key t)))
-                  (if (commandp other-fn)
-                      (call-interactively other-fn)
-                    (call-interactively fn)))
-              (define-key keymap key self))))
-    (define-key keymap key self)))
+  "Bind KEY to FN, falling through to an existing active binding."
+  (cl-labels ((wrapper ()
+                (interactive)
+                (define-key keymap key nil)
+                (unwind-protect
+                    (let ((binding (key-binding key t)))
+                      (if (and (commandp binding)
+                               (not (eq binding #'wrapper)))
+                          (call-interactively binding)
+                        (call-interactively fn)))
+                  (define-key keymap key #'wrapper))))
+    (define-key keymap key #'wrapper)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap definition
@@ -675,13 +668,13 @@ just finding itself. Falls back to FN only if nothing else claims KEY."
 
     ;; indent behaviour
     (define-key map (kbd "<backtab>") #'mortal/unindent-line-or-region)
-    (mortal/define-key-no-overwrite map (kbd "<tab>") #'mortal/complete-or-indent)
+    (mortal/define-key-no-overwrite map (kbd "TAB") #'mortal/complete-or-indent)
     (mortal/define-key-no-overwrite map (kbd "RET") #'mortal/newline-and-indent-current)
     
     ;; completion cycling
-    (define-key map (kbd "M-<tab>") #'completion-preview-next-candidate)
-    (define-key map (kbd "M-S-<tab>") #'completion-preview-prev-candidate)
-
+    (define-key map (kbd "M-TAB") #'completion-preview-next-candidate)
+    (define-key map (kbd "M-S-TAB") #'completion-preview-prev-candidate)
+    
     ;; jumping
     (define-key map (kbd "M-,") #'mortal-jumper/pop-to-mark)
     (define-key map (kbd "M-.") #'mortal-jumper/jump-back)
