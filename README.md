@@ -61,7 +61,10 @@ Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and
 | `<page-up>` | next which-key page |
 | `<page-down>` | previous which-key page |
 | `C-<space>` | exchange point and mark position |
-
+| M-TAB | next completion candidate |
+| M-S-TAB | previous completion candidate |
+| M-, | jump to last left click |
+| M-. | jump to previous left click |
 
 All of this was written bit by bit with the help of Claude and ChatGPT. If you want to add or change features without knowing Elisp, use those tools too! It's really fun. 
 
