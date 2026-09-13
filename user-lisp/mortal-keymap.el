@@ -628,8 +628,8 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "M-x") #'undefined)
     (define-key map (kbd "M-y") #'undefined)
     (define-key map (kbd "M-z") #'undefined)
-    (define-key map (kbd "M-<tab>") #'undefined)
-    (define-key map (kbd "M-S-<tab>") #'undefined)
+    (define-key map (kbd "M-TAB") #'undefined)
+    (define-key map (kbd "M-<iso-lefttab>") #'undefined)
 
     
     (define-key map (kbd "C-M-a") #'undefined)
@@ -673,8 +673,8 @@ Add a trailing newline when yanking multiline text."
     
     ;; completion cycling
     (define-key map (kbd "M-TAB") #'completion-preview-next-candidate)
-    (define-key map (kbd "M-S-TAB") #'completion-preview-prev-candidate)
-    
+    (define-key map (kbd "M-<iso-lefttab>") #'completion-preview-prev-candidate)
+
     ;; jumping
     (define-key map (kbd "M-,") #'mortal-jumper/pop-to-mark)
     (define-key map (kbd "M-.") #'mortal-jumper/jump-back)
