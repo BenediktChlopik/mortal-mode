@@ -240,6 +240,8 @@
                   (kbd "<prior>")
                   #'which-key-show-previous-page-cycle))))
 
+(mortal-response-keymap-mode 1)
+
 
 ;;; ---------------------------------------------------------------------------
 ;;; Sessions
@@ -340,8 +342,6 @@
              `((mortal-mode . ,mortal-map)))
 
 (mortal-mode 1)
-
-(mortal-response-keymap-mode 1)
 
 
 ;;; ---------------------------------------------------------------------------

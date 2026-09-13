@@ -1,24 +1,41 @@
-;;; mortal-jumper.el --- Minimal pop-to-mark jump history -*- lexical-binding: t; -*-
+;;; mortal-jumper.el --- Minimal mouse jump history -*- lexical-binding: t; -*-
 
 ;;; Code:
 
-(defvar-local mortal-jumper--history nil
-  "Locations saved before `mortal-jumper/pop-to-mark'.")
+(defvar mortal-jumper-history '(nil . nil)
+  "Backward and forward mouse jump history.")
 
-(defun mortal-jumper/pop-to-mark ()
-  "Pop to the next mark and remember the current location."
-  (interactive)
-  (unless (equal (point) (car mortal-jumper--history))
-    (push (point) mortal-jumper--history))
-  (deactivate-mark)
-  (call-interactively #'pop-to-mark-command))
+(defun mortal-jumper/mouse-set-point (event)
+  "Save point and move it with mouse-1."
+  (interactive "e")
+  (push (cons (current-buffer) (point))
+        (car mortal-jumper-history))
+  (setcdr mortal-jumper-history nil)
+  (mouse-set-point event))
 
 (defun mortal-jumper/jump-back ()
-  "Return to the previous location in the current buffer."
+  "Jump backward through mouse positions."
   (interactive)
-  (if-let* ((point (pop mortal-jumper--history)))
-      (goto-char point)
-    (user-error "No previous jump")))
+  (unless (car mortal-jumper-history)
+    (user-error "No previous jump"))
+  (push (cons (current-buffer) (point))
+        (cdr mortal-jumper-history))
+  (let ((pos (pop (car mortal-jumper-history))))
+    (deactivate-mark)
+    (switch-to-buffer (car pos))
+    (goto-char (cdr pos))))
+
+(defun mortal-jumper/jump-forward ()
+  "Jump forward through mouse positions."
+  (interactive)
+  (unless (cdr mortal-jumper-history)
+    (user-error "No next jump"))
+  (push (cons (current-buffer) (point))
+        (car mortal-jumper-history))
+  (let ((pos (pop (cdr mortal-jumper-history))))
+    (deactivate-mark)
+    (switch-to-buffer (car pos))
+    (goto-char (cdr pos))))
 
 (provide 'mortal-jumper)
 

@@ -684,8 +684,9 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "M-<iso-lefttab>") #'completion-preview-prev-candidate)
 
     ;; jumping
-    (define-key map (kbd "M-,") #'mortal-jumper/pop-to-mark)
-    (define-key map (kbd "M-.") #'mortal-jumper/jump-back)
+    (define-key map (kbd "<mouse-1>") #'mortal-jumper/mouse-set-point)
+    (define-key map (kbd "M-,") #'mortal-jumper/jump-back)
+    (define-key map (kbd "M-.") #'mortal-jumper/jump-forward)
     
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)
