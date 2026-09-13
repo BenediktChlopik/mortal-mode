@@ -1,10 +1,5 @@
 ;;; mortal-response-keymap.el --- which-key popups for response keymaps -*- lexical-binding: t; -*-
 
-;; Author: You
-;; Version: 1.0
-;; Package-Requires: ((emacs "29.1") (which-key "3.0"))
-;; Keywords: convenience, help
-
 ;;; Commentary:
 
 ;; Shows a which-key popup for "response keymaps" -- keymaps like

@@ -550,10 +550,6 @@ Add a trailing newline when yanking multiline text."
                (not (string-suffix-p "\n" text)))
       (insert "\n"))))
 
-;;; ---------------------------------------------------------------------------
-;;; Keymap helpers
-;;; ---------------------------------------------------------------------------
-
 (defun mortal/define-key-no-overwrite (keymap key fn)
   "Bind KEY to FN, falling through to an existing active binding."
   (cl-labels ((wrapper ()
@@ -567,6 +563,18 @@ Add a trailing newline when yanking multiline text."
                         (call-interactively fn)))
                   (define-key keymap key #'wrapper))))
     (define-key keymap key #'wrapper)))
+
+
+;;; ---------------------------------------------------------------------------
+;;; Mark Region
+;;; ---------------------------------------------------------------------------
+
+(defun mortal/exchange-point-and-mark ()
+  "Exchange point and mark, doing nothing if no mark is active."
+  (interactive)
+  (when mark-active
+    (exchange-point-and-mark)))
+
 
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap definition
@@ -757,7 +765,7 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "S-<down>") #'mortal/mark-next-line)
 
     (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
-    (define-key map (kbd "C-SPC") #'exchange-point-and-mark) 
+    (define-key map (kbd "C-SPC") #'mortal/exchange-point-and-mark)
 
     map))
 
