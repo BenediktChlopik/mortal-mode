@@ -1,7 +1,17 @@
 ;; -*- lexical-binding: t; -*-
 
-(require 'cl-lib)
+;;; ---------------------------------------------------------------------------
+;;; Dependencies
+;;; ---------------------------------------------------------------------------
 
+(require 'cl-lib)
+(require 'delsel)
+(require 'esh-mode)
+(require 'tab-line)
+
+;;; ---------------------------------------------------------------------------
+;;; Line editing
+;;; ---------------------------------------------------------------------------
 
 (defun mortal/move-line-up ()
   "Move the current line up and keep it selected if it was.
@@ -11,7 +21,7 @@ If a region is active, move all marked lines up instead."
       (progn (transpose-lines 1) (forward-line -2))
     (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
            (end (save-excursion (goto-char (region-end))
-                                (if (bolp) (point) (line-beginning-position 2))))
+                                 (if (bolp) (point) (line-beginning-position 2))))
            (prev-beg (save-excursion (goto-char beg) (forward-line -1) (point))))
       (if (= prev-beg beg)
           (message "Can't move further up")
@@ -33,7 +43,7 @@ If a region is active, move all marked lines down instead."
       (progn (forward-line 1) (transpose-lines 1) (forward-line -1))
     (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
            (end (save-excursion (goto-char (region-end))
-                                (if (bolp) (point) (line-beginning-position 2))))
+                                 (if (bolp) (point) (line-beginning-position 2))))
            (next-end (save-excursion (goto-char end) (forward-line 1) (point))))
       (if (= next-end end)
           (message "Can't move further down")
@@ -47,13 +57,10 @@ If a region is active, move all marked lines down instead."
           (set-mark (- (point) (length region)))
           (setq deactivate-mark nil))))))
 
-
-
 (defun mortal/delete-line ()
   "Delete the current line, including its trailing newline."
   (interactive)
   (delete-region (line-beginning-position) (1+ (line-end-position))))
-
 
 (defun mortal/insert-line-below ()
   "Insert a new line below the current line and move point there."
@@ -61,14 +68,13 @@ If a region is active, move all marked lines down instead."
   (end-of-line)
   (newline-and-indent))
 
-
 (defun mortal/copy-line-or-region ()
   "Copy the active region, or the current line with its preceding newline."
   (interactive)
   (if (use-region-p)
       (copy-region-as-kill (region-beginning) (region-end))
     (copy-region-as-kill (max (point-min) (1- (line-beginning-position)))
-                         (line-end-position))
+                          (line-end-position))
     (end-of-line)))
 
 (defun mortal/kill-line-or-region ()
@@ -78,8 +84,10 @@ If a region is active, move all marked lines down instead."
       (kill-region (region-beginning) (region-end))
     (kill-region (line-beginning-position) (line-beginning-position 2))))
 
+;;; ---------------------------------------------------------------------------
+;;; Quitting
+;;; ---------------------------------------------------------------------------
 
-(require 'delsel)
 (defun mortal/quit ()
   "Do the right thing when quitting, mimicking `keyboard-quit' contextually.
 
@@ -129,6 +137,9 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
       (exit-recursive-edit))
      (t (keyboard-quit)))))
 
+;;; ---------------------------------------------------------------------------
+;;; Tab line
+;;; ---------------------------------------------------------------------------
 
 (defun mortal/tab-line-select-tab (n)
   (interactive "n")
@@ -140,8 +151,9 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
   (interactive)
   (tab-line-new-tab (list 'mouse-1)))
 
-
-
+;;; ---------------------------------------------------------------------------
+;;; Smart movement
+;;; ---------------------------------------------------------------------------
 
 (defun mortal/move (dir)
   "Move point one \"smart\" step in DIR (1 = forward, -1 = backward).
@@ -203,7 +215,6 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
         (let ((c2 (class-at)))
           (when (and c2 (not (at-edge-p)))
             (skip (class-chars c2)))))))))
-
 
 (defun mortal/forward-word ()
   "Move point forward one \"smart\" step."
@@ -289,6 +300,9 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (line-move 1)
   (setq mark-active t))
 
+;;; ---------------------------------------------------------------------------
+;;; Whitespace deletion
+;;; ---------------------------------------------------------------------------
 
 (defun mortal/forward-delete-whitespace ()
   "If a region is active, delete it.  Otherwise delete whitespace
@@ -314,7 +328,6 @@ usual way."
       (delete-region (point) end)
       (when blank-next (indent-according-to-mode))))))
 
-
 (defun mortal/backward-delete-whitespace ()
   "If a region is active, delete it.  Otherwise delete whitespace
 before point, crossing at most one newline: if a newline is
@@ -339,7 +352,9 @@ usual way."
       (delete-region start (point))
       (when blank-prev (indent-according-to-mode))))))
 
-
+;;; ---------------------------------------------------------------------------
+;;; Indentation
+;;; ---------------------------------------------------------------------------
 
 (defun mortal/current-indent-offset ()
   "Guess the indent width for the current major mode."
@@ -372,7 +387,6 @@ usual way."
     sh-basic-offset)
    (t tab-width)))
 
-
 (defun mortal/unindent-line-or-region ()
   "Decrease indentation of the current line (or region) by one
 indent step, without going past column 0. If a region is active,
@@ -396,8 +410,10 @@ it is expanded to cover whole lines, and stays selected as such."
       (push-mark end-marker nil t))
     (set-marker end-marker nil)))
 
+;;; ---------------------------------------------------------------------------
+;;; Newline handling
+;;; ---------------------------------------------------------------------------
 
-(require 'esh-mode)
 (defun mortal/newline-and-indent-current ()
   "Insert a newline without ever reindenting the previous line.
 Indent only the newly created current line.
@@ -416,15 +432,18 @@ indenting only the newly created line."
     (let ((cmd (lookup-key (current-local-map) (kbd "RET"))))
       (if (and (commandp cmd)
                (not (eq cmd 'mortal/newline-and-indent-current)))
-          (call-interactively cmd)(if minibuffer-completion-table
-                                      (minibuffer-complete-and-exit)
-                                    (exit-minibuffer)))))
+          (call-interactively cmd)
+        (if minibuffer-completion-table
+            (minibuffer-complete-and-exit)
+          (exit-minibuffer)))))
    (t
     (let (electric-indent-mode)      ; temporarily disable electric-indent's
       (newline))                     ; hooks for this one newline
     (indent-according-to-mode))))    ; indent just the line we landed on
 
-
+;;; ---------------------------------------------------------------------------
+;;; Select all
+;;; ---------------------------------------------------------------------------
 
 ;; hack for marking whole buffer without moving point, because that would move view
 
@@ -436,7 +455,7 @@ Point, mark, and window scrolling are left unchanged."
          (next-command-fn nil))
     (overlay-put overlay 'face 'region)
     (overlay-put overlay 'priority 1000)
-    
+
     (setq next-command-fn
           (lambda ()
             (remove-hook 'pre-command-hook next-command-fn t)
@@ -452,12 +471,15 @@ Point, mark, and window scrolling are left unchanged."
                        (lambda () t))
                       (mark-active t))
               (call-interactively this-command))
-            
+
             ;; Prevent Emacs from executing the command a second time.
             (setq this-command 'ignore)))
-    
+
     (add-hook 'pre-command-hook next-command-fn nil t)))
 
+;;; ---------------------------------------------------------------------------
+;;; Undo / redo
+;;; ---------------------------------------------------------------------------
 
 (defun mortal/undo ()
   "Call `undo', ignoring any active region.
@@ -479,7 +501,9 @@ active region."
     (deactivate-mark))
   (undo-redo))
 
-
+;;; ---------------------------------------------------------------------------
+;;; Commenting
+;;; ---------------------------------------------------------------------------
 
 (defun mortal/comment-dwim ()
   "Like `comment-dwim', but expand a half-marked region to whole lines first,
@@ -509,6 +533,9 @@ the current line first."
       (setq deactivate-mark nil)
       (activate-mark))))
 
+;;; ---------------------------------------------------------------------------
+;;; Yanking
+;;; ---------------------------------------------------------------------------
 
 (defun mortal/yank-plain ()
   "Yank plain text, replacing the active region.
@@ -522,10 +549,12 @@ Add a trailing newline when yanking multiline text."
                (not (string-suffix-p "\n" text)))
       (insert "\n"))))
 
-
+;;; ---------------------------------------------------------------------------
+;;; Keymap helpers
+;;; ---------------------------------------------------------------------------
 
 (defun mortal/define-key-no-overwrite (keymap key fn)
-  "Like `define-key', but the bound command defers to a local 
+  "Like `define-key', but the bound command defers to a local
    binding for KEY, if any, else calls FN.
 
 Binds KEY in KEYMAP to a command that checks `current-local-map' at
@@ -542,9 +571,9 @@ mode (or another local keymap) already bound."
                       (call-interactively local-fn)
                     (call-interactively fn))))))
 
-
-
-(require 'tab-line)
+;;; ---------------------------------------------------------------------------
+;;; Keymap definition
+;;; ---------------------------------------------------------------------------
 
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
@@ -627,11 +656,10 @@ mode (or another local keymap) already bound."
     (define-key map (kbd "C-M-x") #'undefined)
     (define-key map (kbd "C-M-y") #'undefined)
     (define-key map (kbd "C-M-z") #'undefined)
-    
-    
-    ;; quiting
+
+    ;; quitting
     (define-key map (kbd "<escape>") #'mortal/quit)
-    
+
     ;; better deletion
     (define-key map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
     (define-key map (kbd "<delete>") #'mortal/forward-delete-whitespace)
@@ -639,14 +667,14 @@ mode (or another local keymap) already bound."
     ;; indent behaviour
     (define-key map (kbd "<backtab>") #'mortal/unindent-line-or-region)
     (define-key map (kbd "RET") #'mortal/newline-and-indent-current)
-    
+
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)
     (define-key map (kbd "<f2>") help-map)
     (define-key map (kbd "M-x") #'execute-extended-command)
     (define-key map (kbd "C-g") goto-map)
     (define-key map (kbd "C-f") search-map)
-    
+
     ;; tab management
     (define-key map (kbd "M-<left>") #'tab-line-switch-to-prev-tab)
     (define-key map (kbd "M-<right>") #'tab-line-switch-to-next-tab)
@@ -662,10 +690,10 @@ mode (or another local keymap) already bound."
                       (mortal/tab-line-select-tab n)))))
 
     ;; emacs movement
-    (define-key map (kbd "M-p") #'previous-line)
-    (define-key map (kbd "M-n") #'next-line)
-    (define-key map (kbd "M-f") #'forward-char)
-    (define-key map (kbd "M-b") #'backward-char)
+    (define-key map (kbd "M-p") #'mortal/deselect-previous-line)
+    (define-key map (kbd "M-n") #'mortal/deselect-next-line)
+    (define-key map (kbd "M-f") #'mortal/deselect-forward-char)
+    (define-key map (kbd "M-b") #'mortal/deselect-backward-char)
 
     ;; move line
     (define-key map (kbd "M-<up>") #'mortal/move-line-up)
@@ -674,7 +702,6 @@ mode (or another local keymap) already bound."
     ;; deleting
     (define-key map (kbd "C-k") #'mortal/delete-line)
 
-    
     ;; clipboard
     (define-key map (kbd "C-x") #'mortal/kill-line-or-region)
     (define-key map (kbd "C-c") #'mortal/copy-line-or-region)
@@ -694,34 +721,33 @@ mode (or another local keymap) already bound."
 
     ;; replace
     (define-key map (kbd "C-r") #'query-replace)
-    
+
     ;; commenting
     (define-key map (kbd "C-;") #'mortal/comment-dwim)
-    
+
     ;; smarter point movement
     (define-key map (kbd "C-<left>") #'mortal/backward-word)
     (define-key map (kbd "C-<right>") #'mortal/forward-word)
-    
+
     (define-key map (kbd "C-S-<left>") #'mortal/mark-n-backward-word)
     (define-key map (kbd "C-S-<right>") #'mortal/mark-n-forward-word)
-    
+
     ;; selection stuff
     (define-key map (kbd "<left>") #'mortal/deselect-backward-char)
     (define-key map (kbd "<right>") #'mortal/deselect-forward-char)
-    
+
     (mortal/define-key-no-overwrite map (kbd "<up>") #'mortal/deselect-previous-line)
     (mortal/define-key-no-overwrite map (kbd "<down>") #'mortal/deselect-next-line)
-    
+
     (define-key map (kbd "S-<left>") #'mortal/mark-backward-char)
     (define-key map (kbd "S-<right>") #'mortal/mark-forward-char)
-    
+
     (define-key map (kbd "S-<up>") #'mortal/mark-previous-line)
     (define-key map (kbd "S-<down>") #'mortal/mark-next-line)
-    
+
     (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
     (define-key map (kbd "C-SPC") #'exchange-point-and-mark)
-    
-    map))
 
+    map))
 
 (provide 'mortal-keymap)
