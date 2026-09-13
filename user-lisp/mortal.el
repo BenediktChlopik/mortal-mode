@@ -330,7 +330,8 @@
 ;;; ---------------------------------------------------------------------------
 
 (define-minor-mode mortal-mode
-  "A minor mode for mortal-related keybindings."
+  "A global minor mode for mortal-related keybindings."
+  :global t
   :lighter " Mortal"
   :keymap mortal-map
   :group 'mortal)
@@ -338,8 +339,7 @@
 (add-to-list 'emulation-mode-map-alists
              `((mortal-mode . ,mortal-map)))
 
-(add-hook 'prog-mode-hook #'mortal-mode)
-(add-hook 'minibuffer-setup-hook #'mortal-mode)
+(mortal-mode 1)
 
 (mortal-response-keymap-mode 1)
 
