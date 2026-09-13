@@ -8,9 +8,10 @@
 (defun mortal-jumper/mouse-set-point (event)
   "Save point and move it with mouse-1."
   (interactive "e")
-  (push (cons (current-buffer) (point))
-        (car mortal-jumper-history))
-  (setcdr mortal-jumper-history nil)
+  (unless (string-prefix-p "*" (buffer-name))
+    (push (cons (current-buffer) (point))
+          (car mortal-jumper-history))
+    (setcdr mortal-jumper-history nil))
   (mouse-set-point event))
 
 (defun mortal-jumper/jump-back ()
