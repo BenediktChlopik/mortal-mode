@@ -722,7 +722,7 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "C-s") #'save-buffer)
     (define-key map (kbd "C-o") #'find-file)
     (define-key map (kbd "C-n") #'mortal/tab-line-new-tab-menu)
-
+ 
     ;; undo / redo
     (define-key map (kbd "C-z") #'mortal/undo)
     (define-key map (kbd "C-y") #'mortal/redo)
@@ -757,7 +757,7 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "S-<down>") #'mortal/mark-next-line)
 
     (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
-    (define-key map (kbd "C-SPC") #'exchange-point-and-mark)
+    (define-key map (kbd "C-SPC") #'exchange-point-and-mark) 
 
     map))
 
