@@ -274,24 +274,38 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (deactivate-mark)
   (backward-char 1))
 
+
+
+(defun mortal/line-motion (direction)
+  "Move one line in DIRECTION, handling buffer boundaries."
+  (cond
+   ((< direction 0)
+    (if (<= (line-beginning-position) (point-min))
+        (goto-char (line-beginning-position))
+      (forward-line -1)))
+   ((> direction 0)
+    (if (>= (line-end-position) (point-max))
+        (goto-char (line-end-position))
+      (forward-line 1)))))
+  
 (defun mortal/deselect-previous-line ()
   "Move to the previous line and deselect the region."
   (interactive)
   (deactivate-mark)
-  (line-move -1))
+  (mortal/line-motion -1))
 
 (defun mortal/deselect-next-line ()
   "Move to the next line and deselect the region."
   (interactive)
   (deactivate-mark)
-  (line-move 1))
+  (mortal/line-motion 1))
 
 (defun mortal/mark-previous-line ()
   "Move to the previous line, extending the region if active."
   (interactive)
   (unless (use-region-p)
     (push-mark (point) t t))
-  (line-move -1)
+  (mortal/line-motion -1)
   (setq mark-active t))
 
 (defun mortal/mark-next-line ()
@@ -299,8 +313,9 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (interactive)
   (unless (use-region-p)
     (push-mark (point) t t))
-  (line-move 1)
+  (mortal/line-motion 1)
   (setq mark-active t))
+
 
 ;;; ---------------------------------------------------------------------------
 ;;; Whitespace deletion
@@ -666,7 +681,7 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "C-M-x") #'undefined)
     (define-key map (kbd "C-M-y") #'undefined)
     (define-key map (kbd "C-M-z") #'undefined)
-
+    
     ;; quitting
     (define-key map (kbd "<escape>") #'mortal/quit)
 
@@ -756,8 +771,8 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "<left>") #'mortal/deselect-backward-char)
     (define-key map (kbd "<right>") #'mortal/deselect-forward-char)
 
-    (mortal/define-key-no-overwrite map (kbd "<up>") #'mortal/deselect-previous-line)
-    (mortal/define-key-no-overwrite map (kbd "<down>") #'mortal/deselect-next-line)
+    (define-key map (kbd "<up>") #'mortal/deselect-previous-line)
+    (define-key map (kbd "<down>") #'mortal/deselect-next-line)
 
     (define-key map (kbd "S-<left>") #'mortal/mark-backward-char)
     (define-key map (kbd "S-<right>") #'mortal/mark-forward-char)
