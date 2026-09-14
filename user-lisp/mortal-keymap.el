@@ -11,6 +11,8 @@
 (require 'completion-preview)
 (require 'mortal-jumper)
 
+(declare-function mortal-jumper-add-change-point "mortal-jumper")
+
 ;;; ---------------------------------------------------------------------------
 ;;; Line editing
 ;;; ---------------------------------------------------------------------------
@@ -580,11 +582,13 @@ Add a trailing newline when yanking multiline text."
 ;;; ---------------------------------------------------------------------------
 
 (defun mortal/exchange-point-and-mark ()
-  "Exchange point and mark, doing nothing if no mark is active."
+  "Exchange point and mark, doing nothing if no mark is active.
+When there is no active mark, record the current position in the
+change list instead."
   (interactive)
-  (when mark-active
-    (exchange-point-and-mark)))
-
+  (if mark-active
+      (exchange-point-and-mark)
+    (mortal-jumper-add-change-point)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap definition
@@ -700,8 +704,8 @@ Add a trailing newline when yanking multiline text."
     (define-key map (kbd "M-<iso-lefttab>") #'completion-preview-prev-candidate)
 
     ;; jumping
-    (define-key map (kbd "M-,") #'mortal-jumper/jump-back)
-    (define-key map (kbd "M-.") #'mortal-jumper/jump-forward)
+    (define-key map (kbd "M-,") #'xref-go-back)
+    (define-key map (kbd "M-.") #'xref-find-definitions)
     
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)
