@@ -9,9 +9,6 @@
 (require 'esh-mode)
 (require 'tab-line)
 (require 'completion-preview)
-(require 'mortal-jumper)
-
-(declare-function mortal-jumper-add-change-point "mortal-jumper")
 
 ;;; ---------------------------------------------------------------------------
 ;;; Line editing
@@ -587,8 +584,7 @@ When there is no active mark, record the current position in the
 change list instead."
   (interactive)
   (if mark-active
-      (exchange-point-and-mark)
-    (mortal-jumper-add-change-point)))
+      (exchange-point-and-mark)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap definition
