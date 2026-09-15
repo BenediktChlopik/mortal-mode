@@ -321,6 +321,28 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
 
 
 ;;; ---------------------------------------------------------------------------
+;;; Jumping
+;;; ---------------------------------------------------------------------------
+
+(defvar-local mortal/mark-index 0)
+
+(defun mortal/mark-backward ()
+  (interactive)
+  (when mark-ring
+    (setq mortal/mark-index
+          (min (1+ mortal/mark-index)
+               (1- (length mark-ring))))
+    (goto-char (nth mortal/mark-index mark-ring))))
+
+(defun mortal/mark-forward ()
+  (interactive)
+  (when mark-ring
+    (setq mortal/mark-index
+          (max (1- mortal/mark-index) 0))
+    (goto-char (nth mortal/mark-index mark-ring))))
+
+
+;;; ---------------------------------------------------------------------------
 ;;; Whitespace deletion
 ;;; ---------------------------------------------------------------------------
 
@@ -709,8 +731,8 @@ change list instead."
     (define-key map (kbd "M-<iso-lefttab>") #'completion-preview-prev-candidate)
 
     ;; jumping
-    (define-key map (kbd "M-,") #'xref-go-back)
-    (define-key map (kbd "M-.") #'xref-find-definitions)
+    (define-key map (kbd "M-,") #'mortal/mark-backward)
+    (define-key map (kbd "M-.") #'mortal/mark-forward)
     
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)
