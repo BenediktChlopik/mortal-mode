@@ -152,6 +152,14 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
   (interactive)
   (tab-line-new-tab (list 'mouse-1)))
 
+(defun mortal/tab-line-close-and-kill ()
+  "Close the current tab-line tab and kill its buffer."
+  (interactive)
+  (let ((buffer (current-buffer)))
+    (tab-line-close-tab)
+    (when (buffer-live-p buffer)
+      (kill-buffer buffer))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Smart movement
 ;;; ---------------------------------------------------------------------------
@@ -713,7 +721,7 @@ change list instead."
     ;; tab management
     (define-key map (kbd "M-<left>") #'tab-line-switch-to-prev-tab)
     (define-key map (kbd "M-<right>") #'tab-line-switch-to-next-tab)
-    (define-key map (kbd "C-w") #'tab-line-close-tab)
+    (define-key map (kbd "C-w") #'mortal/tab-line-close-and-kill)
     (define-key map (kbd "C-b") #'speedbar)
 
     (dotimes (i 9)
