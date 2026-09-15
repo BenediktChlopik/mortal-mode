@@ -153,12 +153,13 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
   (tab-line-new-tab (list 'mouse-1)))
 
 (defun mortal/tab-line-close-and-kill ()
-  "Close the current tab-line tab and kill its buffer."
+  "Kill the current buffer, then close its tab-line tab.
+Blocks (via `kill-buffer's confirmation prompt) if the buffer
+has unsaved modifications, and only closes the tab if the kill
+actually succeeded."
   (interactive)
-  (let ((buffer (current-buffer)))
-    (tab-line-close-tab)
-    (when (buffer-live-p buffer)
-      (kill-buffer buffer))))
+  (let ((tab-line-close-tab-function #'kill-buffer))
+    (tab-line-close-tab)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Smart movement
