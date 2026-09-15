@@ -731,8 +731,8 @@ change list instead."
     (define-key map (kbd "M-<iso-lefttab>") #'completion-preview-prev-candidate)
 
     ;; jumping
-    (define-key map (kbd "M-,") #'mortal/mark-backward)
-    (define-key map (kbd "M-.") #'mortal/mark-forward)
+    (define-key map (kbd "M-,") #'xref-go-back)
+    (define-key map (kbd "M-.") #'xref-find-definitions)
     
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)
