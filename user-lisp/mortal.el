@@ -271,6 +271,27 @@
                  (tab-line-mode -1)))))))
 
 
+(defun mortal/force-same-window (buffer _alist)
+  "Force BUFFER into the selected window, overriding
+  inhibit-same-window/dedication."
+  (unless (window-minibuffer-p)
+    (when (window-dedicated-p)
+      (set-window-dedicated-p nil nil))
+    (set-window-buffer nil buffer)
+    (selected-window)))
+
+(setq display-buffer-alist
+      (append
+       display-buffer-alist          ;; your other specific rules
+       '(((category . xref-jump)     ;; let xref manage its own window logic
+          (display-buffer-reuse-window
+           display-buffer-same-window
+           display-buffer-pop-up-window)))
+       '((".*" (display-buffer-reuse-window mortal/force-same-window)))))  ;; generic fallback, last
+
+(setq switch-to-buffer-obey-display-actions t)
+
+
 ;;; ---------------------------------------------------------------------------
 ;;; Eglot / Flymake
 ;;; ---------------------------------------------------------------------------
