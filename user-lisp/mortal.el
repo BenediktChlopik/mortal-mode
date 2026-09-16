@@ -11,6 +11,7 @@
 (require 'which-key)
 (require 'treesit)
 (require 'use-package)
+(require 'flymake)
 
 (require 'cua-base)
 (require 'elec-pair)
@@ -204,8 +205,7 @@
 (setq hs-show-indicators t
       hs-indicator-type 'fringe)
 
-(with-eval-after-load 'flymake
-  (define-key flymake-mode-map [left-fringe mouse-1] nil))
+(define-key flymake-mode-map [left-fringe mouse-1] nil)
 
 ;;; ---------------------------------------------------------------------------
 ;;; Scrolling
