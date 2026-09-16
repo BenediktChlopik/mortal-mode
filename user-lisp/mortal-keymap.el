@@ -736,7 +736,8 @@ change list instead."
     
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)
-    (define-key map (kbd "<f2>") help-map)
+    (define-key map (kbd "<f2>") mode-specific-map)
+    (define-key map (kbd "<f4>") help-map)
     (define-key map (kbd "M-x") #'execute-extended-command)
     (define-key map (kbd "C-g") goto-map)
     (define-key map (kbd "C-f") search-map)

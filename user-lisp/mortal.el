@@ -41,6 +41,8 @@
 
 (setq initial-scratch-message nil)
 
+(winner-mode 1)
+
 
 ;;; ---------------------------------------------------------------------------
 ;;; Theme / appearance
@@ -87,7 +89,6 @@
 
 (global-tab-line-mode 1)
 (setq tab-line-close-button-show nil)
-
 
 ;;; Hide minor modes
 
