@@ -167,7 +167,7 @@ actually succeeded."
 
 ;; add more flavours of movement functions, so the user can select what he preffers
 
-(defun mortal/move (dir)
+(defun mortal/move-smart (dir)
   "Move point one \"smart\" step in DIR (1 = forward, -1 = backward).
 
 Rules (stated for DIR = 1; mirror for DIR = -1):
@@ -227,6 +227,23 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
         (let ((c2 (class-at)))
           (when (and c2 (not (at-edge-p)))
             (skip (class-chars c2)))))))))
+
+(defun mortal/move (dir)
+  "Move point according to `mortal-move-style'."
+  (pcase mortal-move-style
+    ('vanilla
+     (if (> dir 0)
+         (progn
+           (forward-word 1))
+       (backward-word 1)))
+
+    ('smart
+     (mortal/move-smart dir))
+
+    (_
+     (user-error "Invalid `mortal-move-style': %S"
+                 mortal-move-style))))
+
 
 (defun mortal/forward-word ()
   "Move point forward one \"smart\" step."
