@@ -165,6 +165,8 @@ actually succeeded."
 ;;; Smart movement
 ;;; ---------------------------------------------------------------------------
 
+;; add more flavours of movement functions, so the user can select what he preffers
+
 (defun mortal/move (dir)
   "Move point one \"smart\" step in DIR (1 = forward, -1 = backward).
 
@@ -257,7 +259,6 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
     (let ((end (point)))
       (mortal/move -1)
       (delete-region (point) end))))
-
 
 
 (defun mortal/mark-move (direction)
