@@ -1,9 +1,12 @@
 ;; -*- lexical-binding: t; -*-
 
 (require 'mortal-base-config)
-(require 'mortal-mode)
+
+
 
 (setq mortal-move-style 'smart)
+
+(require 'mortal-mode)
 
 (mortal-mode 1)
 

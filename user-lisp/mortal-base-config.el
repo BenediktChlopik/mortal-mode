@@ -192,7 +192,7 @@
                (with-current-buffer (window-buffer window)
                  (tab-line-mode -1)))))))
 
-
+;; this should be part of mortal-mode.el
 (defun mortal/force-same-window (buffer _alist)
   "Force BUFFER into the selected window, overriding
 inhibit-same-window/dedication."

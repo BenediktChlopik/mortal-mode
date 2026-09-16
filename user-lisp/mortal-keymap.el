@@ -10,6 +10,9 @@
 (require 'tab-line)
 (require 'completion-preview)
 
+
+(require 'mortal-jumper)
+
 ;;; ---------------------------------------------------------------------------
 ;;; Line editing
 ;;; ---------------------------------------------------------------------------
@@ -358,28 +361,6 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
       (line-move 1)
     (end-of-buffer nil))
   (setq mark-active t))
-
-
-;;; ---------------------------------------------------------------------------
-;;; Jumping
-;;; ---------------------------------------------------------------------------
-
-(defvar-local mortal/mark-index 0)
-
-(defun mortal/mark-backward ()
-  (interactive)
-  (when mark-ring
-    (setq mortal/mark-index
-          (min (1+ mortal/mark-index)
-               (1- (length mark-ring))))
-    (goto-char (nth mortal/mark-index mark-ring))))
-
-(defun mortal/mark-forward ()
-  (interactive)
-  (when mark-ring
-    (setq mortal/mark-index
-          (max (1- mortal/mark-index) 0))
-    (goto-char (nth mortal/mark-index mark-ring))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; whitespace deletion
@@ -775,8 +756,8 @@ change list instead."
     (define-key map (kbd "M-.") #'xref-find-definitions)
     (define-key map (kbd "M-,") #'xref-go-back)
 
-    (define-key map (kbd "C-.") #'mortal/mark-forward)
-    (define-key map (kbd "C-,") #'mortal/mark-backward)
+    (define-key map (kbd "C-.") #'mortal-jumper-next)
+    (define-key map (kbd "C-,") #'mortal-jumper-previous)
     
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)
