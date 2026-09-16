@@ -597,16 +597,18 @@ the current line first."
 ;;; ---------------------------------------------------------------------------
 
 (defun mortal/yank-plain ()
-  "Yank plain text, replacing the active region.
+  "Yank plain text, replacing the active region, then auto-indent it.
 Add a trailing newline when yanking multiline text."
   (interactive)
   (let ((text (substring-no-properties (current-kill 0))))
     (when (use-region-p)
       (delete-region (region-beginning) (region-end)))
-    (insert text)
-    (when (and (>= (cl-count ?\n text) 2)
-               (not (string-suffix-p "\n" text)))
-      (insert "\n"))))
+    (let ((start (point)))
+      (insert text)
+      (when (and (>= (cl-count ?\n text) 2)
+                 (not (string-suffix-p "\n" text)))
+        (insert "\n"))
+      (indent-region start (point))))) 
 
 (defun mortal/define-key-no-overwrite (keymap key fn)
   "Bind KEY to FN, falling through to an existing active binding."
