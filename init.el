@@ -3,6 +3,7 @@
 (require 'mortal-base-config)
 (require 'mortal-mode)
 
-(setq mortal-move-style 'vanillasmart)
+(setq mortal-move-style 'smart)
+
 (mortal-mode 1)
 
