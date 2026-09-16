@@ -239,20 +239,24 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (mortal/move -1))
 
 (defun mortal/forward-delete-word ()
-  "Delete one smart step forward without using the kill ring."
+  "Delete the active region, or one smart step forward."
   (interactive "*")
-  (deactivate-mark)
-  (let ((start (point)))
-    (mortal/move 1)
-    (delete-region start (point))))
+  (if (use-region-p)
+      (delete-region (region-beginning) (region-end))
+    (deactivate-mark)
+    (let ((start (point)))
+      (mortal/move 1)
+      (delete-region start (point)))))
 
 (defun mortal/backward-delete-word ()
-  "Delete one smart step backward without using the kill ring."
+  "Delete the active region, or one smart step backward."
   (interactive "*")
-  (deactivate-mark)
-  (let ((end (point)))
-    (mortal/move -1)
-    (delete-region (point) end)))
+  (if (use-region-p)
+      (delete-region (region-beginning) (region-end))
+    (deactivate-mark)
+    (let ((end (point)))
+      (mortal/move -1)
+      (delete-region (point) end))))
 
 
 
