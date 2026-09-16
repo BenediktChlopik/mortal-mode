@@ -204,6 +204,8 @@
 (setq hs-show-indicators t
       hs-indicator-type 'fringe)
 
+(with-eval-after-load 'flymake
+  (define-key flymake-mode-map [left-fringe mouse-1] nil))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Scrolling
