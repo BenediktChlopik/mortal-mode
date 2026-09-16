@@ -67,6 +67,8 @@
     (electric-pair-mode state)
     (electric-layout-mode state)
 
+    (delete-selection-mode state)
+
 
     ;; -------------------------------------------------------------------------
     ;; Mortal response keymap
