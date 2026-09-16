@@ -640,6 +640,7 @@ change list instead."
 
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
+    ;; (define-key map [t] #'undefined) ; some day i will truely undefine every key; mouse needs to be rebound, as well as any keyboard self insert character
     ;; undefine C-*, M-*, and C-M-*
     (define-key map (kbd "C-a") #'undefined)
     (define-key map (kbd "C-b") #'undefined)
