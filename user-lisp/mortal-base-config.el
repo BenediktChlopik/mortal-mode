@@ -83,7 +83,6 @@
 
 ;;; Tab line
 
-(global-tab-line-mode 1)
 (setq tab-line-close-button-show nil)
 
 
@@ -199,10 +198,9 @@
 inhibit-same-window/dedication."
   (unless (window-minibuffer-p)
     (when (window-dedicated-p)
-      (set-window-dedicated-p nil))
-    (set-window-buffer nil buffer)
+      (set-window-dedicated-p (selected-window) nil))
+    (set-window-buffer (selected-window) buffer)
     (selected-window)))
-
 
 (setq display-buffer-alist
       (append
@@ -226,44 +224,6 @@ inhibit-same-window/dedication."
 
 (add-hook 'prog-mode-hook #'flymake-mode)
 (add-hook 'prog-mode-hook #'eglot-ensure)
-
-
-;;; ---------------------------------------------------------------------------
-;;; Speedbar
-;;; ---------------------------------------------------------------------------
-
-(defun mortal/speedbar-fix (&rest _)
-  "Ensure Speedbar has a live buffer."
-  (setq speedbar-buffer
-        (or (and (boundp 'speedbar-buffer)
-                 (buffer-live-p speedbar-buffer)
-                 speedbar-buffer)
-            (get-buffer-create speedbar--buffer-name)))
-
-  (with-current-buffer speedbar-buffer
-    (speedbar-mode)))
-
-
-(with-eval-after-load 'speedbar
-
-  (setq speedbar-prefer-window t
-        speedbar-window-default-width 25
-        speedbar-window-max-width 25)
-
-  ;; Emacs 31.1 mouse fix.
-  (advice-add #'speedbar-window-mode
-              :before
-              #'mortal/speedbar-fix)
-
-  ;; Open Speedbar files in the main window.
-  (advice-add #'speedbar-find-file-in-frame
-              :override
-              (lambda (file)
-                (let ((win (window-main-window)))
-                  (if (window-live-p win)
-                      (select-window win)
-                    (other-window 1)))
-                (find-file file))))
 
 
 ;;; ---------------------------------------------------------------------------

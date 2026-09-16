@@ -4,3 +4,4 @@
 (require 'mortal-mode)
 
 (mortal-mode 1)
+
