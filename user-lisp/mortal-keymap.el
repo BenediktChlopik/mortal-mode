@@ -238,6 +238,24 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
   (deactivate-mark)
   (mortal/move -1))
 
+(defun mortal/forward-delete-word ()
+  "Delete one smart step forward without using the kill ring."
+  (interactive "*")
+  (deactivate-mark)
+  (let ((start (point)))
+    (mortal/move 1)
+    (delete-region start (point))))
+
+(defun mortal/backward-delete-word ()
+  "Delete one smart step backward without using the kill ring."
+  (interactive "*")
+  (deactivate-mark)
+  (let ((end (point)))
+    (mortal/move -1)
+    (delete-region (point) end)))
+
+
+
 (defun mortal/mark-move (direction)
   (unless (use-region-p)
     (push-mark (point) t t))
@@ -341,58 +359,53 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
           (max (1- mortal/mark-index) 0))
     (goto-char (nth mortal/mark-index mark-ring))))
 
-
 ;;; ---------------------------------------------------------------------------
-;;; Whitespace deletion
+;;; whitespace deletion
 ;;; ---------------------------------------------------------------------------
 
 (defun mortal/forward-delete-whitespace ()
-  "If a region is active, delete it.  Otherwise delete whitespace
-after point, crossing at most one newline: if a newline is
-crossed and the next line was blank, reindent according to
-mode; if no whitespace follows point, delete one character the
-usual way."
+  "Delete region or whitespace after point without using the kill ring."
   (interactive "*")
-  (cond
-   ((use-region-p)
-    (delete-region (region-beginning) (region-end)))
-   ((not (looking-at "[ \t\n]"))
-    (delete-char 1))
-   (t
-    (let (end blank-next)
-      (save-excursion
-        (skip-chars-forward " \t")
-        (when (eq (char-after) ?\n)
-          (forward-char)
+  (let ((delete-active-region nil))
+    (cond
+     ((use-region-p)
+      (delete-region (region-beginning) (region-end)))
+     ((not (looking-at "[ \t\n]"))
+      (delete-char 1 nil))
+     (t
+      (let (end blank-next)
+        (save-excursion
           (skip-chars-forward " \t")
-          (setq blank-next (eolp)))
-        (setq end (point)))
-      (delete-region (point) end)
-      (when blank-next (indent-according-to-mode))))))
+          (when (eq (char-after) ?\n)
+            (forward-char)
+            (skip-chars-forward " \t")
+            (setq blank-next (eolp)))
+          (setq end (point)))
+        (delete-region (point) end)
+        (when blank-next
+          (indent-according-to-mode)))))))
 
 (defun mortal/backward-delete-whitespace ()
-  "If a region is active, delete it.  Otherwise delete whitespace
-before point, crossing at most one newline: if a newline is
-crossed and the previous line was blank, reindent according to
-mode; if no whitespace precedes point, delete one character the
-usual way."
+  "Delete region or whitespace before point without using the kill ring."
   (interactive "*")
-  (cond
-   ((use-region-p)
-    (delete-region (region-beginning) (region-end)))
-   ((not (looking-back "[ \t\n]" 1))
-    (backward-delete-char-untabify 1))
-   (t
-    (let (start blank-prev)
-      (save-excursion
-        (skip-chars-backward " \t")
-        (when (eq (char-before) ?\n)
-          (backward-char)
+  (let ((delete-active-region nil))
+    (cond
+     ((use-region-p)
+      (delete-region (region-beginning) (region-end)))
+     ((not (looking-back "[ \t\n]" 1))
+      (delete-char -1 nil))
+     (t
+      (let (start blank-prev)
+        (save-excursion
           (skip-chars-backward " \t")
-          (setq blank-prev (bolp)))
-        (setq start (point)))
-      (delete-region start (point))
-      (when blank-prev (indent-according-to-mode))))))
+          (when (eq (char-before) ?\n)
+            (backward-char)
+            (skip-chars-backward " \t")
+            (setq blank-prev (bolp)))
+          (setq start (point)))
+        (delete-region start (point))
+        (when blank-prev
+          (indent-according-to-mode)))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Indentation
@@ -720,6 +733,9 @@ change list instead."
     ;; better deletion
     (define-key map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
     (define-key map (kbd "<delete>") #'mortal/forward-delete-whitespace)
+    
+    (define-key map (kbd "C-<backspace>") #'mortal/backward-delete-word)
+    (define-key map (kbd "C-<delete>") #'mortal/forward-delete-word)
 
     ;; indent behaviour
     (define-key map (kbd "<backtab>") #'mortal/unindent-line-or-region)
