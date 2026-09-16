@@ -1,3 +1,6 @@
 ;; -*- lexical-binding: t; -*-
-(require 'mortal)
 
+(require 'mortal-base-config)
+(require 'mortal-mode)
+
+(mortal-mode 1)
