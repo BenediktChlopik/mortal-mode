@@ -192,28 +192,6 @@
                (with-current-buffer (window-buffer window)
                  (tab-line-mode -1)))))))
 
-;; this should be part of mortal-mode.el
-(defun mortal/force-same-window (buffer _alist)
-  "Force BUFFER into the selected window, overriding
-inhibit-same-window/dedication."
-  (unless (window-minibuffer-p)
-    (when (window-dedicated-p)
-      (set-window-dedicated-p (selected-window) nil))
-    (set-window-buffer (selected-window) buffer)
-    (selected-window)))
-
-(setq display-buffer-alist
-      (append
-       display-buffer-alist
-       '(((category . xref-jump)
-          (display-buffer-reuse-window
-           display-buffer-same-window
-           display-buffer-pop-up-window)))
-       '((".*"
-          (display-buffer-reuse-window mortal/force-same-window)))))
-
-(setq switch-to-buffer-obey-display-actions t)
-
 
 ;;; ---------------------------------------------------------------------------
 ;;; Eglot / Flymake

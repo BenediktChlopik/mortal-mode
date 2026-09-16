@@ -10,7 +10,6 @@
 (require 'tab-line)
 (require 'completion-preview)
 
-
 (require 'mortal-jumper)
 
 ;;; ---------------------------------------------------------------------------
