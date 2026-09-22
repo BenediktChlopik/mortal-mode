@@ -609,20 +609,6 @@ Add a trailing newline when yanking multiline text."
         (insert "\n"))
       (indent-region start (point))))) 
 
-(defun mortal/define-key-no-overwrite (keymap key fn)
-  "Bind KEY to FN, falling through to an existing active binding."
-  (cl-labels ((wrapper ()
-                (interactive)
-                (define-key keymap key nil)
-                (unwind-protect
-                    (let ((binding (key-binding key t)))
-                      (if (and (commandp binding)
-                               (not (eq binding #'wrapper)))
-                          (call-interactively binding)
-                        (call-interactively fn)))
-                  (define-key keymap key #'wrapper))))
-    (define-key keymap key #'wrapper)))
-
 
 ;;; ---------------------------------------------------------------------------
 ;;; Mark Region
@@ -636,35 +622,98 @@ change list instead."
   (if mark-active
       (exchange-point-and-mark)))
 
+
+;;; ---------------------------------------------------------------------------
+;;; Helpers
+;;; ---------------------------------------------------------------------------
+
+(defun mortal/define-key-dynamic-fallback (keymap key fn)
+  "Bind KEY to a dynamic fallback around FN.
+
+In `prog-mode`-derived modes, always call FN.
+
+Otherwise, find the highest-precedence active command bound to KEY
+that is not FN.  For function-key events such as <tab> and <return>,
+also consider their corresponding ASCII control-key forms."
+  (let ((lookup-keys
+         (cond
+          ((equal key (kbd "<tab>"))
+           (list key (kbd "TAB")))
+          ((equal key (kbd "<return>"))
+           (list key (kbd "RET")))
+          (t
+           (list key)))))
+    (cl-labels
+        ((wrapper ()
+           (interactive)
+           (if (derived-mode-p 'prog-mode)
+               (call-interactively fn)
+             ;; Remove our own binding so we don't find WRAPPER.
+             (define-key keymap key nil t)
+             (unwind-protect
+                 (let (binding)
+                   (dolist (lookup-key lookup-keys)
+                     (unless binding
+                       (setq binding
+                             (cl-loop
+                              for map in (current-active-maps t)
+                              for candidate = (lookup-key map lookup-key)
+                              when (and (commandp candidate)
+                                        (not (eq candidate fn)))
+                              return candidate))))
+                   (call-interactively (or binding fn)))
+               ;; Reinstall our wrapper.
+               (define-key keymap key #'wrapper)))))
+      (define-key keymap key #'wrapper))))
+
+(defun mortal/install-mouse-fallback (map &optional source)
+  "Restore default mouse behavior in MAP, pulling bindings from SOURCE
+\(defaults to `global-map'; pass a pristine copy if MAP IS global-map).
+Degrades double-/triple- clicks to the plain click's binding (triple
+-> double -> plain) when SOURCE has none for the multi-click form,
+mirroring Emacs's own built-in repeat-click fallback. Also restores
+posn-prefixed areas (mode-line, tab-line, margins, fringes, etc.),
+since those are two-event sequences a [t] default can't reach into."
+  (setq source (or source global-map))
+  (define-key map [t]
+              (lambda ()
+                (interactive)
+                (let (cmd)
+                  (when (consp last-input-event)
+                    (let* ((mods (event-modifiers last-input-event))
+                           (base (event-basic-type last-input-event))
+                           (plain (remq 'double (remq 'triple mods)))
+                           (steps (cond ((memq 'triple mods) (list mods (cons 'double plain) plain))
+                                        ((memq 'double mods) (list mods plain))
+                                        (t (list mods)))))
+                      (while (and steps (not (commandp cmd)))
+                        (setq cmd (lookup-key source
+                                              (vector (event-convert-list
+                                                       (append (pop steps) (list base)))))))))
+                  (if (commandp cmd) (call-interactively cmd) (undefined)))))
+  (dolist (posn '(mode-line header-line tab-line tab-bar
+                            vertical-line left-margin right-margin
+                            left-fringe right-fringe))
+    (let ((sub (lookup-key source (vector posn))))
+      (when (keymapp sub) (define-key map (vector posn) (copy-keymap sub))))))
+
+
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap definition
 ;;; ---------------------------------------------------------------------------
 
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
-    ;; undefine truly any key
+    ;; undefine every key
     (define-key map [t] #'undefined)
+    
+    ;; redifine all mouse key combos to normal behaviour 
+    (mortal/install-mouse-fallback map)
     
     ;; rebind all ascii characters to self insert
     (dolist (i (number-sequence 32 126))
       (define-key map (vector i) #'self-insert-command))
-
-    ;; redefine mouse bindings
-    (dolist (event '(mouse-1 mouse-2 mouse-3 mouse-4 mouse-5 mouse-6 mouse-7
-                             down-mouse-1 down-mouse-2 down-mouse-3
-                             drag-mouse-1 drag-mouse-2 drag-mouse-3
-                             double-mouse-1 double-mouse-2 double-mouse-3
-                             double-down-mouse-1 double-down-mouse-2 double-down-mouse-3
-                             double-drag-mouse-1 double-drag-mouse-2 double-drag-mouse-3
-                             triple-mouse-1 triple-mouse-2 triple-mouse-3
-                             triple-down-mouse-1 triple-down-mouse-2 triple-down-mouse-3
-                             triple-drag-mouse-1 triple-drag-mouse-2 triple-drag-mouse-3
-                             wheel-up wheel-down wheel-left wheel-right
-                             double-wheel-up double-wheel-down double-wheel-left double-wheel-right
-                             triple-wheel-up triple-wheel-down triple-wheel-left triple-wheel-right))
-      (define-key map (vector event) (lookup-key global-map (vector event))))
     
-
     ;; quitting
     (define-key map (kbd "<escape>") #'mortal/quit)
 
@@ -677,8 +726,8 @@ change list instead."
 
     ;; indent behaviour
     (define-key map (kbd "<backtab>") #'mortal/unindent-line-or-region)
-    (mortal/define-key-no-overwrite map (kbd "TAB") #'mortal/complete-or-indent)
-    (mortal/define-key-no-overwrite map (kbd "RET") #'mortal/newline-and-indent-current)
+    (mortal/define-key-dynamic-fallback map (kbd "<tab>") #'mortal/complete-or-indent)
+    (mortal/define-key-dynamic-fallback map (kbd "<return>") #'mortal/newline-and-indent-current)
     
     ;; completion cycling
     (define-key map (kbd "M-TAB") #'completion-preview-next-candidate)
