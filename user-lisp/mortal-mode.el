@@ -120,7 +120,8 @@ inhibit-same-window/dedication."
     ;; -------------------------------------------------------------------------
 
     (global-tab-line-mode state)
-
+    (setq tab-line-new-tab-choice #'mortal/tab-line-new-tab-menu)
+    
 
     ;; -------------------------------------------------------------------------
     ;; Which-key

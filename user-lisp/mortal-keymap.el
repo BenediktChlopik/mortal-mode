@@ -152,9 +152,11 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
     (switch-to-buffer buffer)))
 
 (defun mortal/tab-line-new-tab-menu ()
-  "Open the Tab Line new-tab menu."
+  "Create and open a new empty buffer in `prog-mode`."
   (interactive)
-  (tab-line-new-tab (list 'mouse-1)))
+  (let ((buffer (generate-new-buffer "*new*")))
+    (switch-to-buffer buffer)
+    (prog-mode)))
 
 (defun mortal/tab-line-close-and-kill ()
   "Kill the current buffer, then close its tab-line tab.
