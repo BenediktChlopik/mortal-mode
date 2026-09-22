@@ -668,36 +668,36 @@ also consider their corresponding ASCII control-key forms."
                (define-key keymap key #'wrapper)))))
       (define-key keymap key #'wrapper))))
 
-(defun mortal/install-mouse-fallback (map &optional source)
-  "Restore default mouse behavior in MAP, pulling bindings from SOURCE
-\(defaults to `global-map'; pass a pristine copy if MAP IS global-map).
-Degrades double-/triple- clicks to the plain click's binding (triple
--> double -> plain) when SOURCE has none for the multi-click form,
-mirroring Emacs's own built-in repeat-click fallback. Also restores
-posn-prefixed areas (mode-line, tab-line, margins, fringes, etc.),
-since those are two-event sequences a [t] default can't reach into."
-  (setq source (or source global-map))
+(defun mortal/install-mouse-fallback (map)
+  "Restore default mouse behavior in MAP without blocking local mouse maps."
   (define-key map [t]
               (lambda ()
                 (interactive)
-                (let (cmd)
-                  (when (consp last-input-event)
-                    (let* ((mods (event-modifiers last-input-event))
-                           (base (event-basic-type last-input-event))
+                (let* ((keys (this-command-keys-vector))
+                       (event (aref keys (1- (length keys))))
+                       (cmd (key-binding keys nil)))
+                  ;; Fall back from triple -> double -> plain click.
+                  (when (and (not (commandp cmd))
+                             (consp event))
+                    (let* ((mods (event-modifiers event))
+                           (base (event-basic-type event))
                            (plain (remq 'double (remq 'triple mods)))
-                           (steps (cond ((memq 'triple mods) (list mods (cons 'double plain) plain))
-                                        ((memq 'double mods) (list mods plain))
-                                        (t (list mods)))))
+                           (steps
+                            (cond
+                             ((memq 'triple mods)
+                              (list (cons 'double plain) plain))
+                             ((memq 'double mods)
+                              (list plain))
+                             (t nil))))
                       (while (and steps (not (commandp cmd)))
-                        (setq cmd (lookup-key source
-                                              (vector (event-convert-list
-                                                       (append (pop steps) (list base)))))))))
-                  (if (commandp cmd) (call-interactively cmd) (undefined)))))
-  (dolist (posn '(mode-line header-line tab-line tab-bar
-                            vertical-line left-margin right-margin
-                            left-fringe right-fringe))
-    (let ((sub (lookup-key source (vector posn))))
-      (when (keymapp sub) (define-key map (vector posn) (copy-keymap sub))))))
+                        (let ((newkeys (copy-sequence keys)))
+                          (aset newkeys (1- (length newkeys))
+                                (event-convert-list
+                                 (append (pop steps) (list base))))
+                          (setq cmd (key-binding newkeys nil))))))
+                  (if (commandp cmd)
+                      (call-interactively cmd)
+                    (undefined))))))
 
 
 ;;; ---------------------------------------------------------------------------
