@@ -12,6 +12,8 @@
 
 (require 'mortal-jumper)
 
+(defvar mortal-move-style)
+
 ;;; ---------------------------------------------------------------------------
 ;;; Line editing
 ;;; ---------------------------------------------------------------------------
@@ -640,98 +642,29 @@ change list instead."
 
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
-    ;; (define-key map [t] #'undefined) ; some day i will truely undefine every key; mouse needs to be rebound, as well as any keyboard self insert character
-    ;; undefine C-*, M-*, and C-M-*
-    (define-key map (kbd "C-a") #'undefined)
-    (define-key map (kbd "C-b") #'undefined)
-    (define-key map (kbd "C-c") #'undefined)
-    (define-key map (kbd "C-d") #'undefined)
-    (define-key map (kbd "C-e") #'undefined)
-    (define-key map (kbd "C-f") #'undefined)
-    (define-key map (kbd "C-g") #'undefined)
-    (define-key map (kbd "C-h") #'undefined)
-    (define-key map (kbd "C-i") #'undefined)
-    (define-key map (kbd "C-j") #'undefined)
-    (define-key map (kbd "C-k") #'undefined)
-    (define-key map (kbd "C-l") #'undefined)
-    (define-key map (kbd "C-m") #'undefined)
-    (define-key map (kbd "C-n") #'undefined)
-    (define-key map (kbd "C-o") #'undefined)
-    (define-key map (kbd "C-p") #'undefined)
-    (define-key map (kbd "C-q") #'undefined)
-    (define-key map (kbd "C-r") #'undefined)
-    (define-key map (kbd "C-s") #'undefined)
-    (define-key map (kbd "C-t") #'undefined)
-    (define-key map (kbd "C-u") #'undefined)
-    (define-key map (kbd "C-v") #'undefined)
-    (define-key map (kbd "C-w") #'undefined)
-    (define-key map (kbd "C-x") #'undefined)
-    (define-key map (kbd "C-y") #'undefined)
-    (define-key map (kbd "C-z") #'undefined)
-
-    (define-key map (kbd "M-a") #'undefined)
-    (define-key map (kbd "M-b") #'undefined)
-    (define-key map (kbd "M-c") #'undefined)
-    (define-key map (kbd "M-d") #'undefined)
-    (define-key map (kbd "M-e") #'undefined)
-    (define-key map (kbd "M-f") #'undefined)
-    (define-key map (kbd "M-g") #'undefined)
-    (define-key map (kbd "M-h") #'undefined)
-    (define-key map (kbd "M-i") #'undefined)
-    (define-key map (kbd "M-j") #'undefined)
-    (define-key map (kbd "M-k") #'undefined)
-    (define-key map (kbd "M-l") #'undefined)
-    (define-key map (kbd "M-m") #'undefined)
-    (define-key map (kbd "M-n") #'undefined)
-    (define-key map (kbd "M-o") #'undefined)
-    (define-key map (kbd "M-p") #'undefined)
-    (define-key map (kbd "M-q") #'undefined)
-    (define-key map (kbd "M-r") #'undefined)
-    (define-key map (kbd "M-s") #'undefined)
-    (define-key map (kbd "M-t") #'undefined)
-    (define-key map (kbd "M-u") #'undefined)
-    (define-key map (kbd "M-v") #'undefined)
-    (define-key map (kbd "M-w") #'undefined)
-    (define-key map (kbd "M-x") #'undefined)
-    (define-key map (kbd "M-y") #'undefined)
-    (define-key map (kbd "M-z") #'undefined)
-    (define-key map (kbd "M-TAB") #'undefined)
-    (define-key map (kbd "M-<iso-lefttab>") #'undefined)
-    (define-key map (kbd "M-<down-mouse-1>") #'undefined)
-    (define-key map (kbd "M-<mouse-1>") #'undefined)
-    (define-key map (kbd "M-<down-mouse-3>") #'undefined)
-    (define-key map (kbd "M-<mouse-3>") #'undefined)
-    (define-key map (kbd "M-<drag-mouse-1>") #'undefined)
-    (define-key map (kbd "M-<drag-mouse-3>") #'undefined)
-
+    ;; undefine truly any key
+    (define-key map [t] #'undefined)
     
-    (define-key map (kbd "C-M-a") #'undefined)
-    (define-key map (kbd "C-M-b") #'undefined)
-    (define-key map (kbd "C-M-c") #'undefined)
-    (define-key map (kbd "C-M-d") #'undefined)
-    (define-key map (kbd "C-M-e") #'undefined)
-    (define-key map (kbd "C-M-f") #'undefined)
-    (define-key map (kbd "C-M-g") #'undefined)
-    (define-key map (kbd "C-M-h") #'undefined)
-    (define-key map (kbd "C-M-i") #'undefined)
-    (define-key map (kbd "C-M-j") #'undefined)
-    (define-key map (kbd "C-M-k") #'undefined)
-    (define-key map (kbd "C-M-l") #'undefined)
-    (define-key map (kbd "C-M-m") #'undefined)
-    (define-key map (kbd "C-M-n") #'undefined)
-    (define-key map (kbd "C-M-o") #'undefined)
-    (define-key map (kbd "C-M-p") #'undefined)
-    (define-key map (kbd "C-M-q") #'undefined)
-    (define-key map (kbd "C-M-r") #'undefined)
-    (define-key map (kbd "C-M-s") #'undefined)
-    (define-key map (kbd "C-M-t") #'undefined)
-    (define-key map (kbd "C-M-u") #'undefined)
-    (define-key map (kbd "C-M-v") #'undefined)
-    (define-key map (kbd "C-M-w") #'undefined)
-    (define-key map (kbd "C-M-x") #'undefined)
-    (define-key map (kbd "C-M-y") #'undefined)
-    (define-key map (kbd "C-M-z") #'undefined)
+    ;; rebind all ascii characters to self insert
+    (dolist (i (number-sequence 32 126))
+      (define-key map (vector i) #'self-insert-command))
+
+    ;; redefine mouse bindings
+    (dolist (event '(mouse-1 mouse-2 mouse-3 mouse-4 mouse-5 mouse-6 mouse-7
+                             down-mouse-1 down-mouse-2 down-mouse-3
+                             drag-mouse-1 drag-mouse-2 drag-mouse-3
+                             double-mouse-1 double-mouse-2 double-mouse-3
+                             double-down-mouse-1 double-down-mouse-2 double-down-mouse-3
+                             double-drag-mouse-1 double-drag-mouse-2 double-drag-mouse-3
+                             triple-mouse-1 triple-mouse-2 triple-mouse-3
+                             triple-down-mouse-1 triple-down-mouse-2 triple-down-mouse-3
+                             triple-drag-mouse-1 triple-drag-mouse-2 triple-drag-mouse-3
+                             wheel-up wheel-down wheel-left wheel-right
+                             double-wheel-up double-wheel-down double-wheel-left double-wheel-right
+                             triple-wheel-up triple-wheel-down triple-wheel-left triple-wheel-right))
+      (define-key map (vector event) (lookup-key global-map (vector event))))
     
+
     ;; quitting
     (define-key map (kbd "<escape>") #'mortal/quit)
 
