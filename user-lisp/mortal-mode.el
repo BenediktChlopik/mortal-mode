@@ -129,6 +129,7 @@ inhibit-same-window/dedication."
 
     (which-key-mode state)
 
+    
     (when mortal-mode
       (dolist (entry (accessible-keymaps global-map))
         (let ((keymap (cdr entry)))

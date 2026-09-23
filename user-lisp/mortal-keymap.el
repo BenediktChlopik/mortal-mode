@@ -590,14 +590,22 @@ also consider their corresponding ASCII control-key forms."
 
 (defun mortal/install-mouse-fallback (map)
   "Restore default mouse behavior in MAP without blocking local mouse maps."
+  ;; Never intercept the *down* event for mouse buttons. Emacs's own
+  ;; click/drag/double-click tracking, and things like context-menu-mode's
+  ;; "pop up a menu on down-mouse-3" behavior, only work if a higher-priority
+  ;; active keymap does NOT resolve the down-event to a real/default binding.
+  ;; An explicit nil here lets Emacs fall through to whatever keymap actually
+  ;; defines it (unlike binding to `undefined`/`ignore`, nil does not block
+  ;; that fallthrough across the active keymap list).
+  (dolist (btn '(1 2 3 4 5))
+    (define-key map (vector (intern (format "down-mouse-%d" btn))) nil))
   (define-key map [t]
               (lambda ()
                 (interactive)
                 (let* ((keys (this-command-keys-vector))
                        (event (aref keys (1- (length keys))))
                        (cmd (key-binding keys nil)))
-                  ;; Fall back from triple -> double -> plain click.
-                  (when (and (not (commandp cmd))
+                  (when (and (not (or (commandp cmd) (keymapp cmd)))
                              (consp event))
                     (let* ((mods (event-modifiers event))
                            (base (event-basic-type event))
@@ -607,17 +615,17 @@ also consider their corresponding ASCII control-key forms."
                              ((memq 'triple mods)
                               (list (cons 'double plain) plain))
                              ((memq 'double mods)
-                              (list plain))
-                             (t nil))))
-                      (while (and steps (not (commandp cmd)))
+                              (list plain)))))
+                      (while (and steps (not (or (commandp cmd) (keymapp cmd))))
                         (let ((newkeys (copy-sequence keys)))
                           (aset newkeys (1- (length newkeys))
                                 (event-convert-list
                                  (append (pop steps) (list base))))
                           (setq cmd (key-binding newkeys nil))))))
-                  (if (commandp cmd)
-                      (call-interactively cmd)
-                    (undefined))))))
+                  (cond
+                   ((commandp cmd) (call-interactively cmd))
+                   ((keymapp cmd) (popup-menu cmd event))
+                   (t (undefined)))))))
 
 
 ;;; ---------------------------------------------------------------------------
