@@ -190,19 +190,20 @@ inhibit-same-window/dedication."
     ;; -------------------------------------------------------------------------
 
     (setq switch-to-buffer-obey-display-actions mortal-mode)
-
+    
+    
     (if mortal-mode
         (progn
           (add-to-list 'display-buffer-alist
                        '((category . xref-jump)
                          (display-buffer-reuse-window
                           display-buffer-same-window
-                          display-buffer-pop-up-window)))
+                          display-buffer-pop-up-window))
+                       t)                       ; <- append
           (add-to-list 'display-buffer-alist
-                       '(".*"
-                         (display-buffer-reuse-window mortal/force-same-window))))
+                       '(".*" (display-buffer-reuse-window mortal/force-same-window))
+                       t))                      ; <- append
 
-      ;; Remove display-buffer-alist entries when Mortal is disabled.
       (setq display-buffer-alist
             (delete '((category . xref-jump)
                       (display-buffer-reuse-window
@@ -211,6 +212,7 @@ inhibit-same-window/dedication."
                     (delete '(".*"
                               (display-buffer-reuse-window mortal/force-same-window))
                             display-buffer-alist))))))
+
 
 
 ;;; ---------------------------------------------------------------------------
