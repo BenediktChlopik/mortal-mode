@@ -43,8 +43,8 @@ Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and
 | `C-c` | copy line/region |
 | `C-v` | plain paste |
 | `C-s` | save buffer |
-| `C-o` | find file |
-| `C-n` | new tab menu |
+| `C-o` | open file |
+| `C-n` | new tab |
 | `C-z` | undo |
 | `C-y` | redo |
 | `C-<return>` | insert line below |
@@ -61,6 +61,19 @@ Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and
 | `M-S-TAB` | previous completion candidate |
 | `M-.` | jump to definition |
 | `M-,` | reverse of above |
+| `C-.` | jump to previous mouse click |
+| `C-,` | reverse of above |
+
+
+For absolute beginners, here’s a guide to frame handling:
+
+| Key      | Command               |
+| -------- | --------------------- |
+| `<f1>-0` | delete selected frame |
+| `<f1>-1` | delete other frames   |
+| `<f1>-2` | split horizontally    |
+| `<f1>-3` | split vertically      |
+
 
 All of this was written bit by bit with the help of Claude and ChatGPT. If you want to add or change features without knowing Elisp, use those tools too! It's really fun. 
 
