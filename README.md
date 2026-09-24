@@ -22,7 +22,8 @@ Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and
 | `<backtab>` | smartly unindent |
 | `RET` | newline and indent smartly |
 | `<f1>` | `ctl-x-map` (prefix) |
-| `<f2>` | `help-map` (prefix) |
+| `<f2>` | `ctl-c-map` (prefix) |
+| `<f4>` | `help-map` (prefix) |
 | `M-x` | execute extended command |
 | `C-g` | `goto-map` (prefix) |
 | `C-f` | `search-map` (prefix) |
