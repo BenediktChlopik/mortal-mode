@@ -154,7 +154,7 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
 (defun mortal/tab-line-new-tab-menu ()
   "Create and open a new empty buffer in `prog-mode`."
   (interactive)
-  (let ((buffer (generate-new-buffer "*new*")))
+  (let ((buffer (generate-new-buffer "new")))
     (switch-to-buffer buffer)
     (prog-mode)))
 
