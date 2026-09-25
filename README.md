@@ -11,7 +11,7 @@ git clone https://github.com/BenediktChlopik/mortal-mode.git .emacs.d
 I’ve used this config for a few months, and it’s becoming really close to the modern text editor experience. Contributions are welcome, but I’ll keep this config vanilla.
 
 
-Here's the full set of keybindings in `mortal-map`. First, all `C-*`, `M-*`, and `C-M-*` keys are unbound, and then some are rebound. The table below shows the final bindings.
+Here's the full set of keybindings in `mortal-map`:
 
 | Key | Command |
 |---|---|
