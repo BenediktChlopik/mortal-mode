@@ -656,6 +656,7 @@ also consider their corresponding ASCII control-key forms."
 
     ;; indent behaviour
     (define-key map (kbd "<backtab>") #'mortal/unindent-line-or-region)
+    (define-key map (kbd "S-<iso-lefttab>") #'mortal/unindent-line-or-region)
     (mortal/define-key-dynamic-fallback map (kbd "<tab>") #'mortal/complete-or-indent)
     (mortal/define-key-dynamic-fallback map (kbd "<return>") #'mortal/newline-and-indent-current)
     
