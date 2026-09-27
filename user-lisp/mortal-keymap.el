@@ -393,16 +393,12 @@ it is expanded to cover whole lines, and stays selected as such."
 
 (defun mortal/complete-or-indent ()
   "If a completion-preview ghost text is showing, accept it.
-Otherwise, if a CAPF applies, complete at point.
 Otherwise, indent."
   (interactive)
   (cond
    ;; Ghost text is currently displayed — accept it.
    ((bound-and-true-p completion-preview-active-mode)
     (completion-preview-insert))
-   ;; No preview shown, but a completion is available — complete.
-   ((run-hook-with-args-until-success 'completion-at-point-functions)
-    (completion-at-point))
    ;; Nothing to complete — just indent.
    (t
     (indent-for-tab-command))))
