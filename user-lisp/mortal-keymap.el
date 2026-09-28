@@ -584,44 +584,45 @@ also consider their corresponding ASCII control-key forms."
                (define-key keymap key #'wrapper)))))
       (define-key keymap key #'wrapper))))
 
+(defconst mortal/mouse-fake-prefixes
+  '(tab-line tab-bar header-line mode-line
+             left-fringe right-fringe left-margin right-margin
+             vertical-line vertical-scroll-bar horizontal-scroll-bar))
+
+(defun mortal/mouse-fallback ()
+  (interactive)
+  (let* ((keys  (this-command-keys-vector))
+         (event (aref keys (1- (length keys))))
+         (pos   (and (consp event) (event-start event)))
+         (cmd   (key-binding keys nil nil pos)))   ; POSITION => sees string keymaps
+    (when (and (consp event) (not (or (commandp cmd) (keymapp cmd))))
+      (let* ((mods  (event-modifiers event))
+             (base  (event-basic-type event))
+             (plain (remq 'double (remq 'triple mods)))
+             (steps (cond ((memq 'triple mods)
+                           (list (cons 'double plain) plain))
+                          ((memq 'double mods) (list plain)))))
+        (while (and steps (not (or (commandp cmd) (keymapp cmd))))
+          (let ((newkeys (copy-sequence keys)))
+            (aset newkeys (1- (length newkeys))
+                  (event-convert-list (append (pop steps) (list base))))
+            (setq cmd (key-binding newkeys nil nil pos))))))
+    (cond ((commandp cmd) (call-interactively cmd))
+          ((keymapp cmd) (popup-menu cmd event))
+          ;; unbound drag: do nothing instead of complaining
+          ((and (consp event) (memq 'drag (event-modifiers event))) nil)
+          (t (undefined)))))
+
 (defun mortal/install-mouse-fallback (map)
   "Restore default mouse behavior in MAP without blocking local mouse maps."
-  ;; Never intercept the *down* event for mouse buttons. Emacs's own
-  ;; click/drag/double-click tracking, and things like context-menu-mode's
-  ;; "pop up a menu on down-mouse-3" behavior, only work if a higher-priority
-  ;; active keymap does NOT resolve the down-event to a real/default binding.
-  ;; An explicit nil here lets Emacs fall through to whatever keymap actually
-  ;; defines it (unlike binding to `undefined`/`ignore`, nil does not block
-  ;; that fallthrough across the active keymap list).
   (dolist (btn '(1 2 3 4 5))
     (define-key map (vector (intern (format "down-mouse-%d" btn))) nil))
-  (define-key map [t]
-              (lambda ()
-                (interactive)
-                (let* ((keys (this-command-keys-vector))
-                       (event (aref keys (1- (length keys))))
-                       (cmd (key-binding keys nil)))
-                  (when (and (not (or (commandp cmd) (keymapp cmd)))
-                             (consp event))
-                    (let* ((mods (event-modifiers event))
-                           (base (event-basic-type event))
-                           (plain (remq 'double (remq 'triple mods)))
-                           (steps
-                            (cond
-                             ((memq 'triple mods)
-                              (list (cons 'double plain) plain))
-                             ((memq 'double mods)
-                              (list plain)))))
-                      (while (and steps (not (or (commandp cmd) (keymapp cmd))))
-                        (let ((newkeys (copy-sequence keys)))
-                          (aset newkeys (1- (length newkeys))
-                                (event-convert-list
-                                 (append (pop steps) (list base))))
-                          (setq cmd (key-binding newkeys nil))))))
-                  (cond
-                   ((commandp cmd) (call-interactively cmd))
-                   ((keymapp cmd) (popup-menu cmd event))
-                   (t (undefined)))))))
+  (define-key map [t] #'mortal/mouse-fallback)
+  ;; Same again one level down, for fake-prefixed events like <tab-line> <drag-mouse-1>
+  (dolist (area mortal/mouse-fake-prefixes)
+    (dolist (btn '(1 2 3 4 5))
+      (define-key map (vector area (intern (format "down-mouse-%d" btn))) nil))
+    (define-key map (vector area t) #'mortal/mouse-fallback)))
 
 
 ;;; ---------------------------------------------------------------------------
