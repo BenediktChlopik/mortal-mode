@@ -16,6 +16,8 @@
 (require 'hideshow)
 (require 'completion-preview)
 
+(require 'tab-line)
+
 (eval-when-compile
   (require 'speedbar))
 
@@ -109,6 +111,7 @@
 
 (global-completion-preview-mode 1)
 
+(setq completion-styles '(basic flex))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Tree-sitter
