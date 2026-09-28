@@ -10,3 +10,4 @@ places.eld
 tree-sitter
 */*.elc
 *.eld
+url
