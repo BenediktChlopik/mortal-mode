@@ -158,13 +158,12 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
     (switch-to-buffer buffer)
     (prog-mode)))
 
-(defun mortal/tab-line-close-and-kill ()
-  "Kill the current buffer, then close its tab-line tab.
-Blocks (via `kill-buffer's confirmation prompt) if the buffer
-has unsaved modifications, and only closes the tab if the kill
-actually succeeded."
+(defun mortal/tab-line-close ()
+  "Close the current tab-line tab without killing its buffer.
+The buffer stays alive in the buffer list; it is just removed
+from this window's tab line."
   (interactive)
-  (let ((tab-line-close-tab-function #'kill-buffer))
+  (let ((tab-line-close-tab-function #'bury-buffer))
     (tab-line-close-tab)))
 
 ;;; ---------------------------------------------------------------------------
@@ -679,7 +678,7 @@ also consider their corresponding ASCII control-key forms."
     ;; tab management
     (define-key map (kbd "M-<left>") #'tab-line-switch-to-prev-tab)
     (define-key map (kbd "M-<right>") #'tab-line-switch-to-next-tab)
-    (define-key map (kbd "C-w") #'mortal/tab-line-close-and-kill)
+    (define-key map (kbd "C-w") #'mortal/tab-line-close)
     (define-key map (kbd "C-b") #'speedbar)
 
     (dotimes (i 9)
