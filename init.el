@@ -10,3 +10,7 @@
 
 (mortal-mode 1)
 
+
+(add-to-list 'load-path
+             (expand-file-name "your-config-files/"
+                               user-lisp-directory))

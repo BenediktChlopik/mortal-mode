@@ -1,6 +1,4 @@
-lisp/completion.el
-lisp/multiple-cursors.el
-lisp/python-stuff.el
+user-lisp/your-config-files/*
 .user-lisp-autoloads.el
 auto-save-list
 eln-cache
