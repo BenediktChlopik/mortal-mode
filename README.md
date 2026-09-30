@@ -62,8 +62,6 @@ Here's the full set of keybindings in `mortal-map`:
 | `M-S-TAB` | previous completion candidate |
 | `M-.` | jump to definition |
 | `M-,` | reverse of above |
-| `C-.` | jump to previous mouse click |
-| `C-,` | reverse of above |
 
 
 For absolute beginners, here’s a guide to frame handling:
