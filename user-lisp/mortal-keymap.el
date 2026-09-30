@@ -623,6 +623,32 @@ also consider their corresponding ASCII control-key forms."
       (define-key map (vector area (intern (format "down-mouse-%d" btn))) nil))
     (define-key map (vector area t) #'mortal/mouse-fallback)))
 
+(defun mortal/define-undefined (map)
+  "In MAP, bind [t] to a filter that:
+ - yields to the mode's own keymap in special-mode-derived buffers,
+ - self-inserts printable ASCII elsewhere,
+ - undefines everything else in non-special buffers."
+  (define-key map [t]
+              `(menu-item
+                "" nil
+                :filter ,(lambda (_)
+                           (let* ((ev last-input-event)
+                                  (special
+                                   (or (derived-mode-p 'special-mode)
+                                       ;; Best-effort: some modes set keymap-parent to
+                                       ;; special-mode-map without literally deriving.
+                                       (let ((m (current-local-map)))
+                                         (while (and m (not (eq m special-mode-map)))
+                                           (setq m (keymap-parent m)))
+                                         m))))
+                             (cond
+                              ;; Special buffers: fall through to the mode's bindings.
+                              (special nil)
+                              ;; Printable ASCII: insert the character.
+                              ((and (integerp ev) (<= 32 ev 126))
+                               #'self-insert-command)
+                              ;; Everything else in a normal buffer: kill it.
+                              (t #'undefined)))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap definition
@@ -631,14 +657,10 @@ also consider their corresponding ASCII control-key forms."
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
     ;; undefine every key
-    (define-key map [t] #'undefined)
+    (mortal/define-undefined map)
     
     ;; redefine all mouse keys to normal behaviour 
     (mortal/install-mouse-fallback map)
-    
-    ;; rebind all ascii characters to self insert
-    (dolist (i (number-sequence 32 126))
-      (define-key map (vector i) #'self-insert-command))
     
     ;; quitting
     (define-key map (kbd "<escape>") #'mortal/quit)
