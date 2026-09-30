@@ -16,6 +16,7 @@
 (require 'hideshow)
 (require 'completion-preview)
 
+
 (require 'tab-line)
 
 (eval-when-compile
@@ -214,6 +215,25 @@
 
 (setq focus-follows-mouse t
       mouse-autoselect-window t)
+
+;; -------------------------------------------------------------------------
+;; Which key
+;; -------------------------------------------------------------------------
+
+(which-key-mode 1)
+
+
+(dolist (entry (accessible-keymaps global-map))
+(let ((keymap (cdr entry)))
+  (unless (lookup-key keymap (kbd "<next>"))
+    (define-key keymap
+                (kbd "<next>")
+                #'which-key-show-next-page-cycle))
+  (unless (lookup-key keymap (kbd "<prior>"))
+    (define-key keymap
+                (kbd "<prior>")
+                #'which-key-show-previous-page-cycle))))
+
 
 
 ;;; ---------------------------------------------------------------------------

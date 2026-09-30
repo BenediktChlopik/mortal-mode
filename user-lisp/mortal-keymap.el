@@ -10,7 +10,6 @@
 (require 'tab-line)
 (require 'completion-preview)
 
-(require 'mortal-jumper)
 (require 'mortal-move)
 
 
@@ -685,9 +684,6 @@ also consider their corresponding ASCII control-key forms."
     ;; jumping
     (define-key map (kbd "M-.") #'xref-find-definitions)
     (define-key map (kbd "M-,") #'xref-go-back)
-
-    (define-key map (kbd "C-.") #'mortal-jumper-next)
-    (define-key map (kbd "C-,") #'mortal-jumper-previous)
     
     ;; emacs prefixes
     (define-key map (kbd "<f1>") ctl-x-map)

@@ -9,6 +9,8 @@
 (require 'mortal-keymap)
 (require 'which-key)
 
+
+
 (declare-function mortal-response-keymap-mode "mortal-keymap")
 (declare-function speedbar-mode "speedbar")
 (declare-function speedbar-window-mode "speedbar")
@@ -94,13 +96,7 @@ inhibit-same-window/dedication."
     (electric-layout-mode state)
 
     (delete-selection-mode state)
-
-
-    ;; -------------------------------------------------------------------------
-    ;; Mortal response keymap
-    ;; -------------------------------------------------------------------------
-
-    (mortal-response-keymap-mode state)
+    
 
 
     ;; -------------------------------------------------------------------------
@@ -131,25 +127,6 @@ inhibit-same-window/dedication."
     (fido-mode state)
 
     
-    ;; -------------------------------------------------------------------------
-    ;; Which-key
-    ;; -------------------------------------------------------------------------
-
-    (which-key-mode state)
-
-    
-    (when mortal-mode
-      (dolist (entry (accessible-keymaps global-map))
-        (let ((keymap (cdr entry)))
-          (unless (lookup-key keymap (kbd "<next>"))
-            (define-key keymap
-                        (kbd "<next>")
-                        #'which-key-show-next-page-cycle))
-          (unless (lookup-key keymap (kbd "<prior>"))
-            (define-key keymap
-                        (kbd "<prior>")
-                        #'which-key-show-previous-page-cycle)))))
-
 
     ;; -------------------------------------------------------------------------
     ;; Speedbar
