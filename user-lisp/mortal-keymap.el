@@ -612,15 +612,24 @@ also consider their corresponding ASCII control-key forms."
           (t (undefined)))))
 
 (defun mortal/install-mouse-fallback (map)
-  "Restore default mouse behavior in MAP without blocking local mouse maps."
+  "Restore default mouse behavior in MAP without blocking local mouse maps.
+Only intercepts mouse events; keyboard events fall through to lower maps."
   (dolist (btn '(1 2 3 4 5))
     (define-key map (vector (intern (format "down-mouse-%d" btn))) nil))
-  (define-key map [t] #'mortal/mouse-fallback)
+  (define-key map [t]
+              (list 'menu-item "" #'mortal/mouse-fallback
+                    :filter (lambda (event)
+                              (when (consp event)   ; mouse events are conses
+                                #'mortal/mouse-fallback))))
   ;; Same again one level down, for fake-prefixed events like <tab-line> <drag-mouse-1>
   (dolist (area mortal/mouse-fake-prefixes)
     (dolist (btn '(1 2 3 4 5))
       (define-key map (vector area (intern (format "down-mouse-%d" btn))) nil))
-    (define-key map (vector area t) #'mortal/mouse-fallback)))
+    (define-key map (vector area t)
+                (list 'menu-item "" #'mortal/mouse-fallback
+                      :filter (lambda (event)
+                                (when (consp event)
+                                  #'mortal/mouse-fallback))))))
 
 (defun mortal/define-undefined (map)
   "In MAP, bind [t] to a filter that:
