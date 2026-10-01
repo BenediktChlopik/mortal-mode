@@ -8,3 +8,4 @@ eln-cache
 tree-sitter
 */*.elc
 *.eld
+elpa/
