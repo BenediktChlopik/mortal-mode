@@ -181,23 +181,6 @@
 
 
 ;;; ---------------------------------------------------------------------------
-;;; Special buffers
-;;; ---------------------------------------------------------------------------
-
-(setq display-buffer-alist
-      `(("\\*.*\\*"
-         (display-buffer-in-side-window)
-         (side . right)
-         (window-width . 0.25)
-         (dedicated . t)
-         (preserve-size . (t . nil))
-         (body-function
-          . ,(lambda (window)
-               (with-current-buffer (window-buffer window)
-                 (tab-line-mode -1)))))))
-
-
-;;; ---------------------------------------------------------------------------
 ;;; Eglot / Flymake
 ;;; ---------------------------------------------------------------------------
 
