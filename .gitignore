@@ -1,8 +1,6 @@
 *
-!mortal-mode
 !mortal-mode/*
-!user-lisp/mortal-base-config.el
-!user-lisp/mortal-treesit-completion.el
+!mortal-mode/base-config/*
 !LICENSE
 !README.md
 !init.el
