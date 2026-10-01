@@ -2,17 +2,10 @@
 
 (require 'mortal-base-config)
 
-
 (setq mortal-move-style 'smart)
 
-(require 'mortal-mode)
+(use-package mortal-mode
+  :load-path "~/.emacs.d/mortal-mode"
+  :config
+  (mortal-mode 1))
 
-(mortal-mode 1)
-
-
-(add-to-list 'load-path
-             (expand-file-name "your-config-files/"
-                               user-lisp-directory))
-
-(require 'alternative-keybinds)
-(require 'your-config-init)

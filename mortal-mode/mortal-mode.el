@@ -100,15 +100,14 @@ inhibit-same-window/dedication."
     ;; -------------------------------------------------------------------------
     ;; Mortal keymap with emulation priority
     ;; -------------------------------------------------------------------------
-
+    
     (if mortal-mode
         (add-to-list 'emulation-mode-map-alists
                      `((mortal-mode . ,mortal-map)))
       (setq emulation-mode-map-alists
             (assq-delete-all 'mortal-mode
                              emulation-mode-map-alists)))
-
-
+    
     ;; -------------------------------------------------------------------------
     ;; Tab-line
     ;; -------------------------------------------------------------------------
