@@ -9,8 +9,6 @@
 (require 'mortal-keymap)
 (require 'which-key)
 
-
-
 (declare-function mortal-response-keymap-mode "mortal-keymap")
 (declare-function speedbar-mode "speedbar")
 (declare-function speedbar-window-mode "speedbar")

@@ -658,6 +658,7 @@ Only intercepts mouse events; keyboard events fall through to lower maps."
                               ;; Everything else in a normal buffer: kill it.
                               (t #'undefined)))))))
 
+
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap definition
 ;;; ---------------------------------------------------------------------------
@@ -777,4 +778,22 @@ Only intercepts mouse events; keyboard events fall through to lower maps."
 
     map))
 
+(defun mortal/add-keys (&rest bindings)
+  "Add alternating KEY DEF pairs to `mortal-map'.
+
+KEY is a string understood by `kbd'.  DEF is anything `define-key'
+accepts (a command, keymap, nil to unbind, ...).
+
+Call this from any other file, e.g.:
+
+  (mortal/add-keys
+    \"C-=\" #'mortal/foo
+    \"M-/\" #'mortal/bar
+    \"<f5>\" my-prefix-map)"
+  (while bindings
+    (define-key mortal-map (kbd (pop bindings)) (pop bindings)))
+  mortal-map)
+
+
 (provide 'mortal-keymap)
+
