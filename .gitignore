@@ -1,11 +1,10 @@
 user-lisp/your-config-files/*
+!user-lisp/your-config-files/.gitkeep
 .user-lisp-autoloads.el
 auto-save-list
 eln-cache
-places.eld
 .emacs.desktop
 *.elc
 tree-sitter
 */*.elc
 *.eld
-url
