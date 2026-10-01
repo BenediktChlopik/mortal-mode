@@ -15,3 +15,5 @@
                                user-lisp-directory))
 
 (require 'alternative-keybinds)
+(require 'your-config-init)
+
