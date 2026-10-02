@@ -5,14 +5,12 @@
   :config
   (mortal-mode 1))
 
-(setq mortal-move-style 'smart)
+(setq mortal-move-style 'gecko)
 
 
 (add-to-list 'load-path "~/.emacs.d/mortal-mode/base-config")
 
 (require 'mortal-base-config)
-
-
 
 ;; Add keys like this:
 ;; (require 'mortal-keymap)

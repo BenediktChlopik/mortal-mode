@@ -68,6 +68,91 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
           (when (and c2 (not (at-edge-p)))
             (skip (class-chars c2)))))))))
 
+(defun mortal/move-gecko (dir)
+  "Move point one \"gecko\" step in DIR (1 = forward, -1 = backward).
+1. Every character is one of three groups: **word** (`A-Z`, `a-z`, `0-9`),
+   **special** (everything else except space/tab/newline), or **whitespace**
+   (space/tab/newline).
+
+2. Consecutive characters of the same group form a run.
+
+3. Movement skips the current run, then the adjacent run in the direction
+   of movement.
+
+4. When moving forward, a **word → special** transition creates a stop
+   after the special run.
+
+5. When moving backward, a **special → word** transition creates a stop
+   before the special run.
+
+6. A special run immediately adjacent to whitespace does not create an
+   additional punctuation stop.
+
+7. Consecutive special characters are treated as one run; `...`, `::`,
+   `---`, etc. are not split internally.
+
+8. When the second run contains a newline, movement stops at the newline
+   rather than crossing it.
+
+9. From that newline stop, the next movement crosses the newline and lands
+   at the indentation of the adjacent line.
+"
+  (let ((step (if (> dir 0) 1 -1))
+        (phase 'start)   ; start -> run1 -> run2 -> (trail) ; or start -> indent
+        (cur nil)        ; group of the first (current) run
+        (adj nil)        ; group of the second (adjacent) run
+        (done nil))
+    (while (not done)
+      (let* ((pos (if (> step 0) (point) (1- (point))))
+             (c (and (>= pos (point-min))
+                     (< pos (point-max))
+                     (char-after pos)))
+             ;; Group of the next character in the direction of movement.
+             (g (cond ((null c) nil)
+                      ((eq c ?\n) 'nl)
+                      ((or (eq c ?\s) (eq c ?\t)) 'ws)
+                      ((or (and (>= c ?a) (<= c ?z))
+                           (and (>= c ?A) (<= c ?Z))
+                           (and (>= c ?0) (<= c ?9)))
+                       'word)
+                      (t 'sym))))
+        (cond
+         ;; Buffer edge reached.
+         ((null g)
+          (setq done t))
+
+         ;; Rule 9: sitting at a newline stop -> cross it, then land at the
+         ;; indentation (skip blanks) of the adjacent line.
+         ((eq phase 'start)
+          (if (eq g 'nl)
+              (progn (forward-char step)
+                     (setq phase 'indent))
+            (setq cur g
+                  phase 'run1)))
+
+         ;; Rule 3, part 1: skip the current run.
+         ;; Rule 8: a newline ends movement (stop at it, don't cross).
+         ((eq phase 'run1)
+          (cond ((eq g cur) (forward-char step))
+                ((eq g 'nl) (setq done t))
+                (t (setq adj g
+                         phase 'run2))))
+
+         ;; Rule 3, part 2: skip the adjacent run.
+         ;; Rule 6: a special run followed by blanks gets no stop of its own
+         ;; (rules 4/5), so keep going over the blanks.
+         ((eq phase 'run2)
+          (cond ((eq g adj) (forward-char step))
+                ((and (eq adj 'sym) (eq g 'ws)) (setq phase 'trail))
+                (t (setq done t))))
+
+         ;; Skip blanks (after a special run, or as indentation).
+         ;; Stops at a newline or at the first non-blank character.
+         (t
+          (if (eq g 'ws)
+              (forward-char step)
+            (setq done t))))))))
+
 (defun mortal/move (dir)
   "Move point according to `mortal-move-style'."
   (pcase mortal-move-style
@@ -79,6 +164,9 @@ Rules (stated for DIR = 1; mirror for DIR = -1):
 
     ('smart
      (mortal/move-smart dir))
+    
+    ('gecko
+     (mortal/move-gecko dir))
 
     (_
      (user-error "Invalid `mortal-move-style': %S"
