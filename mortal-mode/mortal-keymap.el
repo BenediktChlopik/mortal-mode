@@ -738,6 +738,7 @@ Only intercepts mouse events; keyboard events fall through to lower maps."
  
     ;; undo / redo
     (define-key map (kbd "C-z") #'mortal/undo)
+    (define-key map (kbd "C-S-z") #'mortal/redo)
     (define-key map (kbd "C-y") #'mortal/redo)
 
     ;; insert new line
