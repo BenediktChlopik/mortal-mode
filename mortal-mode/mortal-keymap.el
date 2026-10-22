@@ -512,15 +512,12 @@ the current line first."
 ;;; ---------------------------------------------------------------------------
 
 (defun mortal/yank-plain ()
-  "Yank plain text, replacing the active region, then auto-indent it."
+  "Yank plain text, replacing the active region."
   (interactive)
   (let ((text (substring-no-properties (current-kill 0))))
     (when (use-region-p)
       (delete-region (region-beginning) (region-end)))
-    (let ((start (point)))
-      (insert text)
-      (indent-region start (point)))))
-
+    (insert text)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Mark Region
