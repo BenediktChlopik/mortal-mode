@@ -158,11 +158,9 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
     (prog-mode)))
 
 (defun mortal/tab-line-close ()
-  "Close the current tab-line tab without killing its buffer.
-The buffer stays alive in the buffer list; it is just removed
-from this window's tab line."
+  "Close the current tab-line tab and kill its buffer."
   (interactive)
-  (let ((tab-line-close-tab-function #'bury-buffer))
+  (let ((tab-line-close-tab-function #'kill-buffer))
     (tab-line-close-tab)))
 
 ;;; ---------------------------------------------------------------------------

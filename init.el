@@ -1,5 +1,12 @@
 ;; -*- lexical-binding: t; -*-
 
+(let ((dir (expand-file-name "user-lisp/" user-emacs-directory)))
+  (when (file-directory-p dir)
+    (add-to-list 'load-path dir)
+    (dolist (file (directory-files dir t "\\.el\\'"))
+      (load file nil 'nomessage))))
+
+
 (use-package mortal-mode
   :load-path "~/.emacs.d/mortal-mode"
   :config
