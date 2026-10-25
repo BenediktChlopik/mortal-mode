@@ -25,7 +25,7 @@ If a region is active, move all marked lines up instead."
       (progn (transpose-lines 1) (forward-line -2))
     (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
            (end (save-excursion (goto-char (region-end))
-                                 (if (bolp) (point) (line-beginning-position 2))))
+                                (if (bolp) (point) (line-beginning-position 2))))
            (prev-beg (save-excursion (goto-char beg) (forward-line -1) (point))))
       (if (= prev-beg beg)
           (message "Can't move further up")
@@ -47,7 +47,7 @@ If a region is active, move all marked lines down instead."
       (progn (forward-line 1) (transpose-lines 1) (forward-line -1))
     (let* ((beg (save-excursion (goto-char (region-beginning)) (line-beginning-position)))
            (end (save-excursion (goto-char (region-end))
-                                 (if (bolp) (point) (line-beginning-position 2))))
+                                (if (bolp) (point) (line-beginning-position 2))))
            (next-end (save-excursion (goto-char end) (forward-line 1) (point))))
       (if (= next-end end)
           (message "Can't move further down")
@@ -78,7 +78,7 @@ If a region is active, move all marked lines down instead."
   (if (use-region-p)
       (copy-region-as-kill (region-beginning) (region-end))
     (copy-region-as-kill (max (point-min) (1- (line-beginning-position)))
-                          (line-end-position))
+                         (line-end-position))
     (end-of-line)))
 
 (defun mortal/kill-line-or-region ()
@@ -582,82 +582,6 @@ also consider their corresponding ASCII control-key forms."
                (define-key keymap key #'wrapper)))))
       (define-key keymap key #'wrapper))))
 
-(defconst mortal/mouse-fake-prefixes
-  '(tab-line tab-bar header-line mode-line
-             left-fringe right-fringe left-margin right-margin
-             vertical-line vertical-scroll-bar horizontal-scroll-bar))
-
-(defun mortal/mouse-fallback ()
-  (interactive)
-  (let* ((keys  (this-command-keys-vector))
-         (event (aref keys (1- (length keys))))
-         (pos   (and (consp event) (event-start event)))
-         (cmd   (key-binding keys nil nil pos)))   ; POSITION => sees string keymaps
-    (when (and (consp event) (not (or (commandp cmd) (keymapp cmd))))
-      (let* ((mods  (event-modifiers event))
-             (base  (event-basic-type event))
-             (plain (remq 'double (remq 'triple mods)))
-             (steps (cond ((memq 'triple mods)
-                           (list (cons 'double plain) plain))
-                          ((memq 'double mods) (list plain)))))
-        (while (and steps (not (or (commandp cmd) (keymapp cmd))))
-          (let ((newkeys (copy-sequence keys)))
-            (aset newkeys (1- (length newkeys))
-                  (event-convert-list (append (pop steps) (list base))))
-            (setq cmd (key-binding newkeys nil nil pos))))))
-    (cond ((commandp cmd) (call-interactively cmd))
-          ((keymapp cmd) (popup-menu cmd event))
-          ;; unbound drag: do nothing instead of complaining
-          ((and (consp event) (memq 'drag (event-modifiers event))) nil)
-          (t (undefined)))))
-
-(defun mortal/install-mouse-fallback (map)
-  "Restore default mouse behavior in MAP without blocking local mouse maps.
-Only intercepts mouse events; keyboard events fall through to lower maps."
-  (dolist (btn '(1 2 3 4 5))
-    (define-key map (vector (intern (format "down-mouse-%d" btn))) nil))
-  (define-key map [t]
-              (list 'menu-item "" #'mortal/mouse-fallback
-                    :filter (lambda (event)
-                              (when (consp event)   ; mouse events are conses
-                                #'mortal/mouse-fallback))))
-  ;; Same again one level down, for fake-prefixed events like <tab-line> <drag-mouse-1>
-  (dolist (area mortal/mouse-fake-prefixes)
-    (dolist (btn '(1 2 3 4 5))
-      (define-key map (vector area (intern (format "down-mouse-%d" btn))) nil))
-    (define-key map (vector area t)
-                (list 'menu-item "" #'mortal/mouse-fallback
-                      :filter (lambda (event)
-                                (when (consp event)
-                                  #'mortal/mouse-fallback))))))
-
-(defun mortal/define-undefined (map)
-  "In MAP, bind [t] to a filter that:
- - yields to the mode's own keymap in special-mode-derived buffers,
- - self-inserts printable ASCII elsewhere,
- - undefines everything else in non-special buffers."
-  (define-key map [t]
-              `(menu-item
-                "" nil
-                :filter ,(lambda (_)
-                           (let* ((ev last-input-event)
-                                  (special
-                                   (or (derived-mode-p 'special-mode)
-                                       ;; Best-effort: some modes set keymap-parent to
-                                       ;; special-mode-map without literally deriving.
-                                       (let ((m (current-local-map)))
-                                         (while (and m (not (eq m special-mode-map)))
-                                           (setq m (keymap-parent m)))
-                                         m))))
-                             (cond
-                              ;; Special buffers: fall through to the mode's bindings.
-                              (special nil)
-                              ;; Printable ASCII: insert the character.
-                              ((and (integerp ev) (<= 32 ev 126))
-                               #'self-insert-command)
-                              ;; Everything else in a normal buffer: kill it.
-                              (t #'undefined)))))))
-
 
 ;;; ---------------------------------------------------------------------------
 ;;; Keymap definition
@@ -665,11 +589,12 @@ Only intercepts mouse events; keyboard events fall through to lower maps."
 
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
-    ;; undefine every key
-    (mortal/define-undefined map)
-    
-    ;; redefine all mouse keys to normal behaviour 
-    (mortal/install-mouse-fallback map)
+    ;; undefine C-*; M-*
+    (dolist (letter (number-sequence ?a ?z))
+      (dolist (modifier '("C-" "M-"))
+        (keymap-set map
+                    (concat modifier (char-to-string letter))
+                    #'undefined)))
     
     ;; quitting
     (define-key map (kbd "<escape>") #'mortal/quit)
@@ -739,7 +664,7 @@ Only intercepts mouse events; keyboard events fall through to lower maps."
     (define-key map (kbd "C-s") #'save-buffer)
     (define-key map (kbd "C-o") #'find-file)
     (define-key map (kbd "C-n") #'mortal/tab-line-new-tab-menu)
- 
+    
     ;; undo / redo
     (define-key map (kbd "C-z") #'mortal/undo)
     (define-key map (kbd "C-S-z") #'mortal/redo)

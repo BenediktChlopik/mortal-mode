@@ -30,6 +30,27 @@
 (defvar hs-show-indicators)
 (defvar hs-indicator-type)
 
+;;; ---------------------------------------------------------------------------
+;;; Helpers
+;;; ---------------------------------------------------------------------------
+
+(defun mortal-kill-undisplayed-buffers ()
+  "Kill buffers not displayed or listed in any tab line."
+  (interactive)
+  (dolist (buffer (buffer-list))
+    (unless
+        (or (get-buffer-window buffer t)
+            (string-match-p "\\`[ *]" (buffer-name buffer))
+            (let ((p (get-buffer-process buffer)))
+              (and p (process-live-p p)))
+            (catch 'tab-line
+              (walk-windows
+               (lambda (w)
+                 (when (memq buffer
+                             (window-parameter w 'tab-line-buffers))
+                   (throw 'tab-line t)))
+               nil t))
+      (kill-buffer buffer)))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; General
