@@ -621,10 +621,12 @@ also consider their corresponding ASCII control-key forms."
     ;; undefine C-*; M-*
     (dolist (letter (number-sequence ?a ?z))
       (dolist (modifier '("C-" "M-"))
-        (keymap-set map
-                    (concat modifier (char-to-string letter))
-                    #'undefined)))
-    
+        (unless (and (equal modifier "C-")
+                     (= letter ?m))
+          (keymap-set map
+                      (concat modifier (char-to-string letter))
+                      #'undefined))))
+
     ;; quitting
     (define-key map (kbd "<escape>") #'mortal/quit)
 
