@@ -396,6 +396,35 @@ it is expanded to cover whole lines, and stays selected as such."
       (push-mark end-marker nil t))
     (set-marker end-marker nil)))
 
+(defun mortal/indent-line-or-region ()
+  "Increase indentation of the current line (or region) by one
+indent step. If a region is active, expand it to whole lines and
+keep it selected."
+  (interactive "*")
+  (let* ((region-p (use-region-p))
+         (beg (if region-p
+                  (save-excursion
+                    (goto-char (region-beginning))
+                    (line-beginning-position))
+                (line-beginning-position)))
+         (end (if region-p
+                  (save-excursion
+                    (goto-char (region-end))
+                    (line-end-position))
+                (line-end-position)))
+         (offset (mortal/current-indent-offset))
+         (end-marker (copy-marker end))
+         (deactivate-mark nil))
+    (save-excursion
+      (goto-char beg)
+      (while (< (point) end-marker)
+        (indent-line-to (+ (current-indentation) offset))
+        (forward-line 1)))
+    (when region-p
+      (goto-char beg)
+      (push-mark end-marker nil t))
+    (set-marker end-marker nil)))
+
 (defun mortal/complete-or-indent ()
   "If a completion-preview ghost text is showing, accept it.
 Otherwise, indent."
@@ -609,6 +638,7 @@ also consider their corresponding ASCII control-key forms."
     ;; indent behaviour
     (define-key map (kbd "<backtab>") #'mortal/unindent-line-or-region)
     (define-key map (kbd "S-<iso-lefttab>") #'mortal/unindent-line-or-region)
+    (define-key map (kbd "C-<tab>") #'mortal/indent-line-or-region)
     (mortal/define-key-dynamic-fallback map (kbd "<tab>") #'mortal/complete-or-indent)
     (mortal/define-key-dynamic-fallback map (kbd "<return>") #'mortal/newline-and-indent-current)
     
