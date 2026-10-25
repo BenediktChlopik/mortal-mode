@@ -630,6 +630,7 @@ also consider their corresponding ASCII control-key forms."
            #'undefined))))
     map))
 
+
 (defun mortal/add-keys (&rest bindings)
   "Add alternating KEY DEF pairs to `mortal-map'.
 KEY is a string understood by `kbd'."
@@ -637,6 +638,35 @@ KEY is a string understood by `kbd'."
     (define-key mortal-map (kbd (pop bindings)) (pop bindings)))
   mortal-map)
 
+
+;; Dynamic fallbacks
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<tab>") #'mortal/complete-or-indent)
+
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<return>") #'mortal/newline-and-indent-current)
+
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<up>") #'mortal/deselect-previous-line)
+
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<down>") #'mortal/deselect-next-line)
+
+
+;; Tab selection keys.
+(dotimes (i 9)
+  (let ((n (1+ i)))
+    (define-key esc-map (kbd (format "M-%d" n)) nil)
+    (mortal/add-keys
+     (format "M-%d" n)
+     (let ((tab-number n))
+       (lambda ()
+         (interactive)
+         (mortal/tab-line-select-tab tab-number))))))
+
+
+
+;; KEYMAP
 (mortal/add-keys
  ;; quitting
  "<escape>" #'mortal/quit
@@ -729,32 +759,6 @@ KEY is a string understood by `kbd'."
  "C-a" #'mortal/temp-select-all-dispatch
  "C-SPC" #'mortal/exchange-point-and-mark)
 
-
-
-;; Dynamic fallbacks
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<tab>") #'mortal/complete-or-indent)
-
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<return>") #'mortal/newline-and-indent-current)
-
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<up>") #'mortal/deselect-previous-line)
-
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<down>") #'mortal/deselect-next-line)
-
-
-;; Tab selection keys.
-(dotimes (i 9)
-  (let ((n (1+ i)))
-    (define-key esc-map (kbd (format "M-%d" n)) nil)
-    (mortal/add-keys
-     (format "M-%d" n)
-     (let ((tab-number n))
-       (lambda ()
-         (interactive)
-         (mortal/tab-line-select-tab tab-number))))))
 
 
 

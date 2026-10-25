@@ -1,23 +1,13 @@
 ;; -*- lexical-binding: t; -*-
 
-(let ((dir (expand-file-name "user-lisp/" user-emacs-directory)))
-  (when (file-directory-p dir)
-    (add-to-list 'load-path dir)
-    (dolist (file (directory-files dir t "\\.el\\'"))
-      (load file nil 'nomessage))))
-
+(add-to-list 'load-path
+             (expand-file-name "mortal-mode/" user-emacs-directory))
 
 (use-package mortal-mode
-  :load-path "~/.emacs.d/mortal-mode"
   :config
   (mortal-mode 1))
 
 (setq mortal-move-style 'gecko)
-
-
-(add-to-list 'load-path "~/.emacs.d/mortal-mode/base-config")
-
-(require 'mortal-base-config)
 
 ;; Add keys like this:
 ;; (require 'mortal-keymap)
@@ -25,3 +15,17 @@
 ;;  "C-=" #'foo
 ;;  "M-/" #'bar
 ;;  "<f5>" my-prefix-map)
+
+
+(add-to-list 'load-path 
+             (expand-file-name "mortal-mode/base-config" user-emacs-directory))
+(require 'mortal-base-config)
+
+
+(add-hook 'after-init-hook
+          (lambda ()
+            (let ((dir (expand-file-name "user-lisp/" user-emacs-directory)))
+              (add-to-list 'load-path dir)
+              (byte-recompile-directory dir 0)
+              (mapc (lambda (file) (load file nil 'nomessage))
+                    (directory-files dir t "\\.el\\'")))))
