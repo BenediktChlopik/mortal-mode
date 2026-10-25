@@ -619,11 +619,11 @@ also consider their corresponding ASCII control-key forms."
 
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
-    ;; Undefine C-* and M-* except C-m.
+    ;; Undefine C-* and M-* except C-m and C-i (TAB).
     (dolist (letter (number-sequence ?a ?z))
       (dolist (modifier '("C-" "M-"))
         (unless (and (equal modifier "C-")
-                     (= letter ?m))
+                     (memq letter '(?i ?m)))
           (define-key
            map
            (kbd (concat modifier (char-to-string letter)))
@@ -716,7 +716,7 @@ KEY is a string understood by `kbd'."
 
  ;; deleting
  "C-k" #'mortal/delete-line
-
+ 
  ;; clipboard
  "C-x" #'mortal/kill-line-or-region
  "C-c" #'mortal/copy-line-or-region
