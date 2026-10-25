@@ -158,10 +158,19 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
     (prog-mode)))
 
 (defun mortal/tab-line-close ()
-  "Close the current tab-line tab and kill its buffer."
+  "Close the current tab, preserving buffers displayed elsewhere."
   (interactive)
-  (let ((tab-line-close-tab-function #'kill-buffer))
-    (tab-line-close-tab)))
+  (let* ((buffer (current-buffer))
+         (elsewhere (delq (selected-window)
+                          (get-buffer-window-list buffer nil t)))
+         (last-tab (null (cdr (funcall tab-line-tabs-function)))))
+    (if (and last-tab (window-deletable-p))
+        (if elsewhere
+            (delete-window)
+          (kill-buffer-and-window))
+      (let ((tab-line-close-tab-function
+             (if elsewhere #'bury-buffer #'kill-buffer)))
+        (tab-line-close-tab)))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Smart movement
