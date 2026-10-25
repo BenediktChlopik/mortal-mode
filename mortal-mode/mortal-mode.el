@@ -59,20 +59,6 @@
 
 
 ;;; ---------------------------------------------------------------------------
-;;; Display buffer
-;;; ---------------------------------------------------------------------------
-
-(defun mortal/force-same-window (buffer _alist)
-  "Force BUFFER into the selected window, overriding
-inhibit-same-window/dedication."
-  (unless (window-minibuffer-p)
-    (when (window-dedicated-p)
-      (set-window-dedicated-p (selected-window) nil))
-    (set-window-buffer (selected-window) buffer)
-    (selected-window)))
-
-
-;;; ---------------------------------------------------------------------------
 ;;; Mortal mode
 ;;; ---------------------------------------------------------------------------
 
@@ -156,39 +142,10 @@ inhibit-same-window/dedication."
         (advice-remove #'speedbar-window-mode
                        #'mortal/speedbar-fix)
         (advice-remove #'speedbar-find-file-in-frame
-                       #'mortal/speedbar-find-file)))
+                       #'mortal/speedbar-find-file)))))
 
 
-    ;; -------------------------------------------------------------------------
-    ;; Display buffer
-    ;; -------------------------------------------------------------------------
-
-    (setq switch-to-buffer-obey-display-actions mortal-mode)
     
-    
-    (if mortal-mode
-        (progn
-          (add-to-list 'display-buffer-alist
-                       '((category . xref-jump)
-                         (display-buffer-reuse-window
-                          display-buffer-same-window
-                          display-buffer-pop-up-window))
-                       t)                       ; <- append
-          (add-to-list 'display-buffer-alist
-                       '(".*" (display-buffer-reuse-window mortal/force-same-window))
-                       t))                      ; <- append
-
-      (setq display-buffer-alist
-            (delete '((category . xref-jump)
-                      (display-buffer-reuse-window
-                       display-buffer-same-window
-                       display-buffer-pop-up-window))
-                    (delete '(".*"
-                              (display-buffer-reuse-window mortal/force-same-window))
-                            display-buffer-alist))))))
-
-
-
 ;;; ---------------------------------------------------------------------------
 ;;; End
 ;;; ---------------------------------------------------------------------------

@@ -522,13 +522,13 @@ the current line first."
 ;;; ---------------------------------------------------------------------------
 
 (defun mortal/exchange-point-and-mark ()
-  "Exchange point and mark, doing nothing if no mark is active.
-When there is no active mark, record the current position in the
-change list instead."
+  "Exchange point and mark if active; otherwise reactivate the region."
   (interactive)
-  (if mark-active
-      (exchange-point-and-mark)))
-
+  (cond
+   (mark-active
+    (exchange-point-and-mark))
+   ((mark t)
+    (activate-mark))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Helpers
