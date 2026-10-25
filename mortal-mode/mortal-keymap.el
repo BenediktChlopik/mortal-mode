@@ -616,141 +616,146 @@ also consider their corresponding ASCII control-key forms."
 ;;; Keymap definition
 ;;; ---------------------------------------------------------------------------
 
+
 (defvar mortal-map
   (let ((map (make-sparse-keymap)))
-    ;; undefine C-*; M-*
+    ;; Undefine C-* and M-* except C-m.
     (dolist (letter (number-sequence ?a ?z))
       (dolist (modifier '("C-" "M-"))
         (unless (and (equal modifier "C-")
                      (= letter ?m))
-          (keymap-set map
-                      (concat modifier (char-to-string letter))
-                      #'undefined))))
-
-    ;; quitting
-    (define-key map (kbd "<escape>") #'mortal/quit)
-
-    ;; better deletion
-    (define-key map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
-    (define-key map (kbd "<delete>") #'mortal/forward-delete-whitespace)
-    
-    (define-key map (kbd "C-<backspace>") #'mortal/backward-delete-word)
-    (define-key map (kbd "C-<delete>") #'mortal/forward-delete-word)
-
-    ;; indent behaviour
-    (define-key map (kbd "<backtab>") #'mortal/unindent-line-or-region)
-    (define-key map (kbd "S-<iso-lefttab>") #'mortal/unindent-line-or-region)
-    (define-key map (kbd "C-<tab>") #'mortal/indent-line-or-region)
-    (mortal/define-key-dynamic-fallback map (kbd "<tab>") #'mortal/complete-or-indent)
-    (mortal/define-key-dynamic-fallback map (kbd "<return>") #'mortal/newline-and-indent-current)
-    
-    ;; completion cycling
-    (define-key map (kbd "M-TAB") #'completion-preview-next-candidate)
-    (define-key map (kbd "M-<iso-lefttab>") #'completion-preview-prev-candidate)
-
-    ;; jumping
-    (define-key map (kbd "M-.") #'xref-find-definitions)
-    (define-key map (kbd "M-,") #'xref-go-back)
-    
-    ;; emacs prefixes
-    (define-key map (kbd "<f1>") ctl-x-map)
-    (define-key map (kbd "<f2>") mode-specific-map)
-    (define-key map (kbd "<f4>") help-map)
-    (define-key map (kbd "M-x") #'execute-extended-command)
-    (define-key map (kbd "C-g") goto-map)
-    (define-key map (kbd "C-f") search-map)
-
-    ;; tab management
-    (define-key map (kbd "M-<left>") #'tab-line-switch-to-prev-tab)
-    (define-key map (kbd "M-<right>") #'tab-line-switch-to-next-tab)
-    (define-key map (kbd "C-w") #'mortal/tab-line-close)
-    (define-key map (kbd "C-b") #'speedbar)
-
-    (dotimes (i 9)
-      (let ((n (1+ i)))
-        (define-key esc-map (kbd (format "M-%d" n)) nil)
-        (define-key map (kbd (format "M-%d" n))
-                    (lambda ()
-                      (interactive)
-                      (mortal/tab-line-select-tab n)))))
-
-    ;; emacs movement
-    (define-key map (kbd "M-p") #'mortal/deselect-previous-line)
-    (define-key map (kbd "M-n") #'mortal/deselect-next-line)
-    (define-key map (kbd "M-f") #'mortal/deselect-forward-char)
-    (define-key map (kbd "M-b") #'mortal/deselect-backward-char)
-
-    ;; move line
-    (define-key map (kbd "M-<up>") #'mortal/move-line-up)
-    (define-key map (kbd "M-<down>") #'mortal/move-line-down)
-
-    ;; deleting
-    (define-key map (kbd "C-k") #'mortal/delete-line)
-
-    ;; clipboard
-    (define-key map (kbd "C-x") #'mortal/kill-line-or-region)
-    (define-key map (kbd "C-c") #'mortal/copy-line-or-region)
-    (define-key map (kbd "C-v") #'mortal/yank-plain)
-
-    ;; file actions
-    (define-key map (kbd "C-s") #'save-buffer)
-    (define-key map (kbd "C-o") #'find-file)
-    (define-key map (kbd "C-n") #'mortal/tab-line-new-tab-menu)
-    
-    ;; undo / redo
-    (define-key map (kbd "C-z") #'mortal/undo)
-    (define-key map (kbd "C-S-z") #'mortal/redo)
-    (define-key map (kbd "C-y") #'mortal/redo)
-
-    ;; insert new line
-    (define-key map (kbd "C-<return>") #'mortal/insert-line-below)
-
-    ;; replace
-    (define-key map (kbd "C-r") #'query-replace)
-
-    ;; commenting
-    (define-key map (kbd "C-;") #'mortal/comment-dwim)
-
-    ;; smarter point movement
-    (define-key map (kbd "C-<left>") #'mortal/backward-word)
-    (define-key map (kbd "C-<right>") #'mortal/forward-word)
-
-    (define-key map (kbd "C-S-<left>") #'mortal/mark-n-backward-word)
-    (define-key map (kbd "C-S-<right>") #'mortal/mark-n-forward-word)
-
-    ;; selection stuff
-    (define-key map (kbd "<left>") #'mortal/deselect-backward-char)
-    (define-key map (kbd "<right>") #'mortal/deselect-forward-char)
-
-    (mortal/define-key-dynamic-fallback map (kbd "<up>") #'mortal/deselect-previous-line)
-    (mortal/define-key-dynamic-fallback map (kbd "<down>") #'mortal/deselect-next-line)
-
-    (define-key map (kbd "S-<left>") #'mortal/mark-backward-char)
-    (define-key map (kbd "S-<right>") #'mortal/mark-forward-char)
-
-    (define-key map (kbd "S-<up>") #'mortal/mark-previous-line)
-    (define-key map (kbd "S-<down>") #'mortal/mark-next-line)
-
-    (define-key map (kbd "C-a") #'mortal/temp-select-all-dispatch)
-    (define-key map (kbd "C-SPC") #'mortal/exchange-point-and-mark)
-
+          (define-key
+           map
+           (kbd (concat modifier (char-to-string letter)))
+           #'undefined))))
     map))
 
 (defun mortal/add-keys (&rest bindings)
   "Add alternating KEY DEF pairs to `mortal-map'.
-
-KEY is a string understood by `kbd'.  DEF is anything `define-key'
-accepts (a command, keymap, nil to unbind, ...).
-
-Call this from any other file, e.g.:
-
-  (mortal/add-keys
-    \"C-=\" #'mortal/foo
-    \"M-/\" #'mortal/bar
-    \"<f5>\" my-prefix-map)"
+KEY is a string understood by `kbd'."
   (while bindings
     (define-key mortal-map (kbd (pop bindings)) (pop bindings)))
   mortal-map)
+
+(mortal/add-keys
+ ;; quitting
+ "<escape>" #'mortal/quit
+
+ ;; better deletion
+ "<backspace>" #'mortal/backward-delete-whitespace
+ "<delete>" #'mortal/forward-delete-whitespace
+ "C-<backspace>" #'mortal/backward-delete-word
+ "C-<delete>" #'mortal/forward-delete-word
+
+ ;; indent behaviour
+ "<backtab>" #'mortal/unindent-line-or-region
+ "S-<iso-lefttab>" #'mortal/unindent-line-or-region
+ "C-<tab>" #'mortal/indent-line-or-region
+
+ ;; completion cycling
+ "M-TAB" #'completion-preview-next-candidate
+ "M-<iso-lefttab>" #'completion-preview-prev-candidate
+
+ ;; jumping
+ "M-." #'xref-find-definitions
+ "M-," #'xref-go-back
+
+ ;; emacs prefixes
+ "<f1>" ctl-x-map
+ "<f2>" mode-specific-map
+ "<f4>" help-map
+ "M-x" #'execute-extended-command
+ "C-g" goto-map
+ "C-f" search-map
+
+ ;; tab management
+ "M-<left>" #'tab-line-switch-to-prev-tab
+ "M-<right>" #'tab-line-switch-to-next-tab
+ "C-w" #'mortal/tab-line-close
+ "C-b" #'speedbar
+
+ ;; emacs movement
+ "M-p" #'mortal/deselect-previous-line
+ "M-n" #'mortal/deselect-next-line
+ "M-f" #'mortal/deselect-forward-char
+ "M-b" #'mortal/deselect-backward-char
+
+ ;; move line
+ "M-<up>" #'mortal/move-line-up
+ "M-<down>" #'mortal/move-line-down
+
+ ;; deleting
+ "C-k" #'mortal/delete-line
+
+ ;; clipboard
+ "C-x" #'mortal/kill-line-or-region
+ "C-c" #'mortal/copy-line-or-region
+ "C-v" #'mortal/yank-plain
+
+ ;; file actions
+ "C-s" #'save-buffer
+ "C-o" #'find-file
+ "C-n" #'mortal/tab-line-new-tab-menu
+
+ ;; undo / redo
+ "C-z" #'mortal/undo
+ "C-S-z" #'mortal/redo
+ "C-y" #'mortal/redo
+
+ ;; insert new line
+ "C-<return>" #'mortal/insert-line-below
+
+ ;; replace
+ "C-r" #'query-replace
+
+ ;; commenting
+ "C-;" #'mortal/comment-dwim
+
+ ;; smarter point movement
+ "C-<left>" #'mortal/backward-word
+ "C-<right>" #'mortal/forward-word
+ "C-S-<left>" #'mortal/mark-n-backward-word
+ "C-S-<right>" #'mortal/mark-n-forward-word
+
+ ;; selection stuff
+ "<left>" #'mortal/deselect-backward-char
+ "<right>" #'mortal/deselect-forward-char
+ "S-<left>" #'mortal/mark-backward-char
+ "S-<right>" #'mortal/mark-forward-char
+ "S-<up>" #'mortal/mark-previous-line
+ "S-<down>" #'mortal/mark-next-line
+
+ ;; selection commands
+ "C-a" #'mortal/temp-select-all-dispatch
+ "C-SPC" #'mortal/exchange-point-and-mark)
+
+
+
+;; Dynamic fallbacks
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<tab>") #'mortal/complete-or-indent)
+
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<return>") #'mortal/newline-and-indent-current)
+
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<up>") #'mortal/deselect-previous-line)
+
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<down>") #'mortal/deselect-next-line)
+
+
+;; Tab selection keys.
+(dotimes (i 9)
+  (let ((n (1+ i)))
+    (define-key esc-map (kbd (format "M-%d" n)) nil)
+    (mortal/add-keys
+     (format "M-%d" n)
+     (let ((tab-number n))
+       (lambda ()
+         (interactive)
+         (mortal/tab-line-select-tab tab-number))))))
+
 
 
 (provide 'mortal-keymap)
