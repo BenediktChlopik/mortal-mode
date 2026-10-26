@@ -655,8 +655,13 @@ KEY is a string understood by `kbd'."
 (mortal/define-key-dynamic-fallback
  mortal-map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
 
+# somehow needed
 (mortal/define-key-dynamic-fallback
- mortal-map (kbd "delete") #'mortal/forward-delete-whitespace)
+ mortal-map (kbd "d") #'self-insert-command)
+
+
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<delete>") #'mortal/forward-delete-whitespace)
 
 
 ;; Tab selection keys.
