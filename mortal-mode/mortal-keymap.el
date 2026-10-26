@@ -633,35 +633,24 @@ also consider their corresponding ASCII control-key forms."
 
 (defun mortal/add-keys (&rest bindings)
   "Add alternating KEY DEF pairs to `mortal-map'.
-KEY is a string understood by `kbd'."
-  (while bindings
-    (define-key mortal-map (kbd (pop bindings)) (pop bindings)))
-  mortal-map)
 
+KEY is a string understood by `kbd'.
 
-;; Dynamic fallbacks
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<tab>") #'mortal/complete-or-indent)
+If BINDINGS contains `:fallback' followed by a non-nil value,
+use dynamic fallback bindings for all subsequent KEY DEF pairs."
+  (let (fallback)
+    (while bindings
+      (let ((item (pop bindings)))
+        (if (eq item :fallback)
+            (setq fallback (pop bindings))
+          (let ((key (kbd item))
+                (def (pop bindings)))
+            (if fallback
+                (mortal/define-key-dynamic-fallback
+                 mortal-map key def)
+              (define-key mortal-map key def))))))
+    mortal-map))
 
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<return>") #'mortal/newline-and-indent-current)
-
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<up>") #'mortal/deselect-previous-line)
-
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<down>") #'mortal/deselect-next-line)
-
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
-
-# somehow needed
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "d") #'self-insert-command)
-
-
-(mortal/define-key-dynamic-fallback
- mortal-map (kbd "<delete>") #'mortal/forward-delete-whitespace)
 
 
 ;; Tab selection keys.
@@ -676,8 +665,19 @@ KEY is a string understood by `kbd'."
          (mortal/tab-line-select-tab tab-number))))))
 
 
-
 ;; KEYMAP
+
+;; Dynamic fallbacks
+(mortal/add-keys
+ :fallback t
+ "<tab>"       #'mortal/complete-or-indent
+ "<return>"    #'mortal/newline-and-indent-current
+ "<up>"        #'mortal/deselect-previous-line
+ "<down>"      #'mortal/deselect-next-line
+ "<backspace>" #'mortal/backward-delete-whitespace
+ "d"           #'self-insert-command ; somehow needed
+ "<delete>"    #'mortal/forward-delete-whitespace)
+
 (mortal/add-keys
  ;; quitting
  "<escape>" #'mortal/quit
@@ -768,8 +768,4 @@ KEY is a string understood by `kbd'."
  "C-a" #'mortal/temp-select-all-dispatch
  "C-SPC" #'mortal/exchange-point-and-mark)
 
-
-
-
 (provide 'mortal-keymap)
-
