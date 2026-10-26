@@ -47,6 +47,13 @@
 ;; thought, and `got-add-thought' adds one by hand.  The file is plain
 ;; JSON, so it can be committed, diffed and edited.
 ;;
+;; The graph buffer is interactive.  Click or hover a node to select it,
+;; then press n (thought), d (decision), r (research idea), o (option),
+;; e (expand with the server), s (status), D (decide), E (edit), x (delete)
+;; or RET (open).  `got-graph-from-chat' builds a graph from any gptel chat,
+;; and `got-enable-chat-tools' lets the model in a chat add decisions and
+;; research ideas to the graph itself as the conversation goes.
+;;
 ;; Emacs starts the server as a child process by running `got-server-script'
 ;; over stdio.  That script must not print anything to stdout except the
 ;; MCP protocol.
@@ -67,7 +74,17 @@
 ;;   `got-ask'                  ask the server; saves and draws the result
 ;;   `got-load'                 load this project's saved graph
 ;;   `got-expand'               extend a saved thought via the server
+;;   `got-graph-from-chat'      turn any gptel chat into a graph
+;;   `got-enable-chat-tools'    let the model in a gptel chat record into the graph
+;;   `got-probe'                test the server by hand when it will not connect
 ;;   `got-add-thought'          add a thought by hand
+;;   `got-add-decision'         add a decision to make
+;;   `got-add-option'           add an option to a decision
+;;   `got-decide'               settle a decision by choosing an option
+;;   `got-add-research'         add a research idea
+;;   `got-set-status'           set the status of a thought
+;;   `got-edit-thought'         change a thought's text or type
+;;   `got-delete-thought'       delete a thought, keeping its children
 ;;   `got-store-open'           visit the project's .got.json
 ;;   `got-graph-from-buffer'    save and draw the last ```json block
 ;;   `got-graph-import-region'  add JSON from the region to the graph
@@ -100,8 +117,12 @@
 (defvar graph-fa2--player-timer)
 (defvar graph-fa2--current-frame)
 (defvar graph-fa2-node-clicked-functions)
+(defvar graph-fa2-node-hovered-functions)
 (declare-function gptel "gptel")
 (declare-function gptel-send "gptel")
+(declare-function gptel-request "gptel")
+(declare-function gptel-make-tool "gptel")
+(declare-function gptel-tool-name "gptel")
 (declare-function gptel-get-tool "gptel")
 (declare-function gptel-mcp-connect "gptel-integrations")
 (declare-function mcp-stop-server "mcp")
@@ -192,6 +213,19 @@ it can be committed, diffed, loaded with `got-load' and extended."
 Set it per project in `.dir-locals.el' to keep the graph elsewhere."
   :type '(choice (const :tag "Project root default" nil) file))
 
+(defcustom got-default-status
+  '(("decision" . "open") ("research" . "todo") ("option" . "candidate"))
+  "Status given to a new thought of each type."
+  :type '(alist :key-type string :value-type string))
+
+(defcustom got-status-choices
+  '(("decision" "open" "decided" "deferred")
+    ("research" "todo" "in-progress" "done" "dropped")
+    ("option" "candidate" "chosen" "rejected"))
+  "Statuses offered by `got-set-status', by thought type.
+Any other text is accepted too."
+  :type '(alist :key-type string :value-type (repeat string)))
+
 (defcustom got-graph-colours
   '(("problem"      . "#cdd6f4")
     ("sub_question" . "#74c7ec")
@@ -199,12 +233,22 @@ Set it per project in `.dir-locals.el' to keep the graph elsewhere."
     ("evidence"     . "#a6e3a1")
     ("synthesis"    . "#cba6f7")
     ("answer"       . "#f9e2af")
+    ("question"     . "#74c7ec")
+    ("decision"     . "#f38ba8")
+    ("option"       . "#f5c2e7")
+    ("research"     . "#94e2d5")
     ("generate"     . "#89b4fa")
     ("score"        . "#f9e2af")
     ("select"       . "#a6e3a1")
     ("aggregate"    . "#cba6f7")
     ("refine"       . "#fab387"))
   "Node colour by operation type."
+  :type '(alist :key-type string :value-type string))
+
+(defcustom got-graph-type-markers
+  '(("decision" . "[D] ") ("research" . "[R] ") ("option" . "- ") ("question" . "? "))
+  "Text put before the label of a thought of each type.
+Types listed here also show their status in the label."
   :type '(alist :key-type string :value-type string))
 
 (defcustom got-graph-default-colour "#9399b2"
@@ -231,7 +275,9 @@ If it never does, the graph is left running, never blank."
   :doc "Prefix map for Graph of Thoughts commands.  Bind it, e.g. to C-c g."
   "a" #'got-ask
   "b" #'got-graph-from-buffer
+  "c" #'got-graph-from-chat
   "d" #'got-graph-demo
+  "i" #'got-add-decision
   "e" #'got-expand
   "f" #'got-graph-freeze
   "g" #'got-graph-show
@@ -239,6 +285,9 @@ If it never does, the graph is left running, never blank."
   "l" #'got-load
   "n" #'got-add-thought
   "o" #'got-store-open
+  "p" #'got-probe
+  "r" #'got-add-research
+  "w" #'got-enable-chat-tools
   "s" #'got-start
   "t" #'got-tools
   "?" #'got-graph-doctor)
@@ -335,7 +384,7 @@ If it never does, the graph is left running, never blank."
             (error (message "got: %s" (error-message-string err)))))
          ((> now deadline)
           (setq got--starting nil)
-          (message "got: server not ready after %ss; see *Messages* and M-x mcp-hub"
+          (message "got: server not ready after %ss; try M-x got-probe, or see *Messages* and M-x mcp-hub"
                    got-start-timeout))
          (t (push w pending)))))
     ;; Operations queued by callbacks while we ran stay after the old ones.
@@ -380,6 +429,171 @@ Several waiting operations share one polling timer."
   "Show the tools the server exposes, starting it first if necessary."
   (interactive)
   (got--when-ready #'got--connected-p #'got--show-tools))
+
+;;;; Probing the server by hand
+
+(defcustom got-probe-timeout 20
+  "Seconds `got-probe' waits for each reply from the server."
+  :type 'number)
+
+(defconst got--probe-initialize
+  (concat "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":"
+          "{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},"
+          "\"clientInfo\":{\"name\":\"got-probe\",\"version\":\"0\"}}}")
+  "The standard MCP initialize request `got-probe' sends.")
+
+(defconst got--probe-initialized
+  "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"
+  "The standard MCP notification that ends the handshake.")
+
+(defconst got--probe-list-tools
+  "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}"
+  "The standard MCP request listing the server's tools.")
+
+(defun got--probe-parse (line)
+  "Parse LINE as a JSON object into an alist, or return nil."
+  (condition-case nil
+      (let ((j (json-parse-string line :object-type 'alist :array-type 'list
+                                  :null-object nil :false-object nil)))
+        (and (got--alistp j) j))
+    (error nil)))
+
+(defun got--probe (script &optional args env timeout)
+  "Run SCRIPT with ARGS and ENV as an MCP stdio server and talk to it.
+ENV is an alist of (NAME . VALUE).  Waits up to TIMEOUT seconds for each
+reply.  Returns a plist: :command, :lines (all stdout lines), :non-json
+\(stdout lines that are not JSON objects), :stderr, :init and :tools-reply
+\(the parsed replies or nil), :tools (their names) and :exit (the exit
+status if the server ended by itself, else nil)."
+  (let* ((timeout (or timeout got-probe-timeout))
+         (out "")
+         (err-buf (generate-new-buffer " *got-probe-stderr*"))
+         (process-environment
+          (append (mapcar (lambda (e) (format "%s=%s" (car e) (cdr e))) env)
+                  process-environment))
+         (proc (make-process :name "got-probe" :command (cons script args)
+                             :connection-type 'pipe :noquery t :buffer nil
+                             :stderr err-buf
+                             :filter (lambda (_p s) (setq out (concat out s)))))
+         (complete (lambda () (butlast (split-string out "\n"))))
+         (reply (lambda (id)
+                  (cl-some (lambda (l)
+                             (let ((j (got--probe-parse l)))
+                               (and j (equal (alist-get 'id j) id) j)))
+                           (funcall complete))))
+         (wait (lambda (pred secs)
+                 (let ((deadline (+ (float-time) secs)))
+                   (while (and (not (funcall pred)) (process-live-p proc)
+                               (< (float-time) deadline))
+                     (accept-process-output proc 0.1))
+                   (accept-process-output proc 0.05))))
+         init tools-reply exit)
+    (unwind-protect
+        (progn
+          ;; Some servers announce themselves; give them a moment.
+          (funcall wait (lambda () (funcall complete)) 1.5)
+          (when (process-live-p proc)
+            (process-send-string proc (concat got--probe-initialize "\n"))
+            (funcall wait (lambda () (funcall reply 1)) timeout)
+            (setq init (funcall reply 1)))
+          (when (and init (alist-get 'result init) (process-live-p proc))
+            (process-send-string proc (concat got--probe-initialized "\n"))
+            (process-send-string proc (concat got--probe-list-tools "\n"))
+            (funcall wait (lambda () (funcall reply 2)) timeout)
+            (setq tools-reply (funcall reply 2)))
+          (unless (process-live-p proc)
+            (setq exit (process-exit-status proc))))
+      (when (process-live-p proc) (delete-process proc)))
+    (let* ((lines (delete "" (funcall complete)))
+           (stderr (with-current-buffer err-buf (buffer-string))))
+      (kill-buffer err-buf)
+      (list :command (cons script args)
+            :lines lines
+            :non-json (cl-remove-if #'got--probe-parse lines)
+            :stderr stderr
+            :init init
+            :tools-reply tools-reply
+            :tools (mapcar (lambda (tl) (got--str (alist-get 'name tl)))
+                           (alist-get 'tools (alist-get 'result tools-reply)))
+            :exit exit))))
+
+(defun got--probe-verdicts (r)
+  "Return a list of plain-language findings for the probe result R."
+  (let* ((init (plist-get r :init))
+         (err (and init (alist-get 'error init)))
+         (finding nil))
+    (cl-flet ((add (fmt &rest a) (push (apply #'format fmt a) finding)))
+      (when (plist-get r :exit)
+        (add "The server exited by itself (status %s)%s."
+             (plist-get r :exit)
+             (if (and init (alist-get (quote result) init)) "" " before finishing the handshake")))
+      (when (plist-get r :non-json)
+        (add "stdout has lines that are not JSON, which breaks MCP over stdio: %S. Make launch.sh send logs and banners to stderr."
+             (truncate-string-to-width (car (plist-get r :non-json)) 100 nil nil "…")))
+      (cond
+       (err
+        (add "initialize was rejected: code %s, \"%s\"%s."
+             (alist-get 'code err) (alist-get 'message err)
+             (if (alist-get 'data err)
+                 (format ", details %s" (truncate-string-to-width
+                                         (got--str (alist-get 'data err)) 200 nil nil "…"))
+               ""))
+        (when (equal (alist-get 'code err) -32602)
+          (add "-32602 (invalid parameters) is sometimes a server's catch-all for an internal error; the server's own log below usually names the real cause.")))
+       ((and init (alist-get 'result init))
+        (add "initialize succeeded (server: %s)."
+             (let ((si (alist-get 'serverInfo (alist-get 'result init))))
+               (if si (format "%s %s" (alist-get 'name si) (alist-get 'version si)) "unnamed")))
+        (cond ((plist-get r :tools) (add "tools: %s." (string-join (plist-get r :tools) ", ")))
+              ((plist-get r :tools-reply)
+               (add "tools/list gave no tools: %s"
+                    (truncate-string-to-width (json-encode (plist-get r :tools-reply)) 160)))
+              (t (add "no reply to tools/list."))))
+       ((not (plist-get r :exit))
+        (add "no reply to initialize; the server may be slow to start or not speak MCP on stdio.")))
+      (let ((errors (cl-remove-if-not
+                     (lambda (l) (string-match-p "\\<\\(?:ERROR\\|CRITICAL\\|Traceback\\)\\>" l))
+                     (split-string (plist-get r :stderr) "\n" t))))
+        (dolist (l (cl-subseq errors 0 (min 2 (length errors))))
+          (add "server log: %s"
+               (truncate-string-to-width (string-trim l) 220 nil nil "…"))))
+      (when (and init (alist-get 'result init) (plist-get r :tools)
+                 (not (plist-get r :non-json)))
+        (add "The handshake works by hand, so mcp.el should be able to connect.")))
+    (nreverse finding)))
+
+;;;###autoload
+(defun got-probe ()
+  "Test the server by hand and explain what it answers.
+Runs `got-server-script' as a child process, sends the standard MCP
+handshake and lists the raw replies.  Use it when `got-start' fails."
+  (interactive)
+  (let ((script (expand-file-name got-server-script)))
+    (unless (file-executable-p script)
+      (user-error "`got-server-script' %s is missing or not executable" script))
+    (message "got: probing %s (up to %ss per step) ..." script got-probe-timeout)
+    (let ((r (got--probe script got-server-args got-server-env)))
+      (with-current-buffer (get-buffer-create "*got-probe*")
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert "Command: " (string-join (plist-get r :command) " ") "\n\n")
+          (insert "Findings\n")
+          (dolist (f (got--probe-verdicts r))
+            (insert "  - " f "\n"))
+          (insert "\nstdout, line by line\n")
+          (if (plist-get r :lines)
+              (dolist (l (plist-get r :lines))
+                (insert (if (got--probe-parse l) "  json  " "  TEXT  ")
+                        (truncate-string-to-width l 400 nil nil "…") "\n"))
+            (insert "  (nothing)\n"))
+          (insert "\nstderr (last 40 lines)\n")
+          (let ((errs (last (split-string (string-trim (plist-get r :stderr)) "\n" t) 40)))
+            (if errs
+                (dolist (l errs) (insert "  " l "\n"))
+              (insert "  (nothing)\n")))
+          (goto-char (point-min)))
+        (special-mode)
+        (pop-to-buffer (current-buffer))))))
 
 ;;;; Parsing: JSON result -> graph
 
@@ -561,6 +775,8 @@ With PROBLEM, add a root node that parentless thoughts link to."
 (defconst got-store-version 1
   "Version of the store file format written by this package.")
 
+(defvar got--last-graph nil "The most recently parsed graph plist.")
+
 (defvar got--graph-file nil
   "Store file behind the graph on screen, or nil for an unsaved graph.")
 
@@ -583,9 +799,12 @@ project root, so it can be set per project in `.dir-locals.el'."
 
 (defun got--target-file ()
   "Return the store file the current command should act on.
-Inside a thought detail buffer that is the file behind the graph on
-screen; elsewhere it is the current project's store."
-  (or (and (derived-mode-p 'got-detail-mode) got--graph-file)
+Inside a thought detail buffer or the graph buffer that is the file behind
+the graph on screen; elsewhere it is the current project's store."
+  (or (and got--graph-file
+           (or (derived-mode-p 'got-detail-mode)
+               (bound-and-true-p got-graph-mode))
+           got--graph-file)
       (got--store-file)))
 
 (defun got--stored->node (alist)
@@ -758,43 +977,33 @@ With a prefix argument, ask for the store FILE instead."
   (find-file (got--store-file)))
 
 ;;;###autoload
-(defun got-add-thought (content &optional type parents)
+(defun got-add-thought (content &optional type parents status)
   "Add a thought with CONTENT by hand to the project's graph.
 TYPE defaults to \"thought\".  PARENTS is a list of ids of stored
-thoughts it follows from.  Returns the new id."
-  (interactive
-   (let* ((cands (got--candidates
-                  (plist-get (got--store-read (got--target-file)) :nodes)))
-          (content (read-string "Thought: "))
-          (type (got--read-type))
-          (picked (and cands
-                       (completing-read-multiple
-                        "Parents (comma-separated, empty for none): "
-                        (mapcar #'car cands) nil t))))
-     (list content type (delq nil (mapcar (lambda (c) (cdr (assoc c cands))) picked)))))
-  (unless got-store-enabled
-    (user-error "Persistence is off; set `got-store-enabled'"))
+thoughts it follows from.  STATUS defaults per `got-default-status'.
+Returns the new id.  Interactively, the thought under the pointer is the
+parent."
+  (interactive (got--add-args nil))
   (when (string-blank-p content)
     (user-error "Give the thought some text"))
-  (let* ((file (got--target-file))
-         (store (got--store-read file))
-         (old (plist-get store :nodes))
-         (ids (mapcar (lambda (n) (plist-get n :id)) old))
-         (n 1)
-         id)
-    (dolist (p parents)
-      (unless (member p ids)
-        (user-error "Parent %s is not in %s" p (abbreviate-file-name file))))
-    (while (member (setq id (format "m%d" n)) ids)
-      (cl-incf n))
-    (let ((new (list :id id :type (or type "thought") :content content
-                     :score nil :status "" :parents parents
-                     :run "manual" :created (format-time-string "%FT%T%z"))))
-      (got--store-write file (list :runs (plist-get store :runs)
-                                   :nodes (append old (list new))))
-      (setq got--graph-file file)
-      (got-graph-show (got--build-graph (append old (list new))))
-      id)))
+  (let ((type (or type "thought"))
+        id)
+    (got--modify
+     (lambda (old)
+       (let ((ids (mapcar (lambda (n) (plist-get n :id)) old))
+             (n 1))
+         (dolist (p parents)
+           (unless (member p ids)
+             (user-error "Parent %s is not in the store" p)))
+         (while (member (setq id (format "m%d" n)) ids)
+           (cl-incf n))
+         (append old (list (list :id id :type type :content content :score nil
+                                 :status (or status
+                                             (cdr (assoc type got-default-status))
+                                             "")
+                                 :parents parents :run "manual"
+                                 :created (format-time-string "%FT%T%z")))))))
+    id))
 
 ;;;###autoload
 (defun got-expand (id &optional question)
@@ -806,7 +1015,7 @@ The new run is linked under ID in the project's graph."
                   (plist-get (got--store-read (got--target-file)) :nodes)))
           (_ (unless cands (user-error "No thoughts stored yet; try M-x got-ask")))
           (label (completing-read "Expand thought: " (mapcar #'car cands) nil t
-                                  nil nil (car (rassoc got--detail-id cands)))))
+                                  nil nil (car (rassoc (got--current-node-id) cands)))))
      (list (cdr (assoc label cands))
            (read-string "Question (empty = explore further): "))))
   (let* ((file (got--target-file))
@@ -819,9 +1028,285 @@ The new run is linked under ID in the project's graph."
                question)
              nil id file)))
 
+;;;; Selecting and editing thoughts
+
+(defvar got--quiet nil
+  "Non-nil while a gptel tool changes the store: do not redraw the graph.")
+
+(defvar got--selected-id nil "Id of the thought last clicked in the graph.")
+(defvar got--hover-id nil "Id of the thought under the pointer, or nil.")
+
+(defun got--find-node (nodes id)
+  "Return the node with ID in NODES, or nil."
+  (cl-find id nodes :key (lambda (n) (plist-get n :id)) :test #'equal))
+
+(defun got--plist-merge (node props)
+  "Return a copy of NODE with the key/value pairs of PROPS set."
+  (let ((copy (copy-sequence node)))
+    (while props
+      (setf (plist-get copy (car props)) (cadr props))
+      (setq props (cddr props)))
+    copy))
+
+(defun got--update-node (nodes id props)
+  "Return NODES with the node ID changed by PROPS.
+Signals a `user-error' when ID is not in NODES."
+  (unless (got--find-node nodes id)
+    (user-error "Thought %s is not in the store" id))
+  (mapcar (lambda (n) (if (equal (plist-get n :id) id) (got--plist-merge n props) n))
+          nodes))
+
+(defun got--current-node-id ()
+  "Return the id of the thought the user is pointing at, or nil.
+In the graph that is the one under the pointer, else the last clicked;
+in a detail buffer it is the thought shown."
+  (let ((id (cond ((derived-mode-p 'got-detail-mode) got--detail-id)
+                  ((bound-and-true-p got-graph-mode)
+                   (or got--hover-id got--selected-id)))))
+    (and id got--last-graph
+         (gethash id (plist-get got--last-graph :byid))
+         id)))
+
+(defun got--modify (fn)
+  "Apply FN to the stored nodes, save the result and redraw the graph.
+FN receives the node list and returns the new one.  Nothing is written if
+FN signals an error."
+  (unless got-store-enabled
+    (user-error "Persistence is off; set `got-store-enabled'"))
+  (let* ((file (got--target-file))
+         (store (got--store-read file))
+         (nodes (funcall fn (plist-get store :nodes))))
+    (got--store-write file (list :runs (plist-get store :runs) :nodes nodes))
+    (unless got--quiet
+      (setq got--graph-file file)
+      (got-graph-show (got--build-graph nodes)))
+    nodes))
+
+(defun got--stored-node (id)
+  "Return the stored node ID of the target file, or signal a `user-error'."
+  (let ((file (got--target-file)))
+    (or (got--find-node (plist-get (got--store-read file) :nodes) id)
+        (user-error "Thought %s is not in %s (saved graphs only)"
+                    id (abbreviate-file-name file)))))
+
+(defun got--pick-node (prompt &optional type)
+  "Return the id of the thought to act on.
+That is the one under the pointer (or shown), when it has TYPE or TYPE is
+nil; otherwise ask with PROMPT among the stored thoughts of that type."
+  (let ((cur (got--current-node-id)))
+    (if (and cur
+             (or (null type)
+                 (equal type (plist-get (gethash cur (plist-get got--last-graph :byid))
+                                        :type))))
+        cur
+      (let* ((nodes (cl-remove-if-not
+                     (lambda (n) (or (null type) (equal type (plist-get n :type))))
+                     (plist-get (got--store-read (got--target-file)) :nodes)))
+             (cands (got--candidates nodes)))
+        (unless cands
+          (user-error "No %sthoughts stored yet" (if type (concat type " ") "")))
+        (cdr (assoc (completing-read prompt (mapcar #'car cands) nil t) cands))))))
+
+(defun got--add-args (type)
+  "Read the arguments of `got-add-thought' interactively.
+TYPE is fixed, or nil to ask for it.  The parent is the thought under
+the pointer or shown; with none, you may pick parents."
+  (let* ((cur (got--current-node-id))
+         (nodes (plist-get (got--store-read (got--target-file)) :nodes))
+         (cands (got--candidates nodes))
+         (type (or type (got--read-type)))
+         (content (read-string (format "%s: " (capitalize type))))
+         (parents (cond (cur (list cur))
+                        (cands
+                         (delq nil
+                               (mapcar (lambda (c) (cdr (assoc c cands)))
+                                       (completing-read-multiple
+                                        "Parents (comma-separated, empty for none): "
+                                        (mapcar #'car cands) nil t)))))))
+    (list content type parents)))
+
+;;;###autoload
+(defun got-add-decision (content &optional parents)
+  "Add a decision to make, CONTENT, under PARENTS to the graph.
+Add its options with `got-add-option' and settle it with `got-decide'."
+  (interactive (let ((a (got--add-args "decision"))) (list (nth 0 a) (nth 2 a))))
+  (got-add-thought content "decision" parents))
+
+;;;###autoload
+(defun got-add-research (content &optional parents)
+  "Add a research idea, CONTENT, under PARENTS to the graph."
+  (interactive (let ((a (got--add-args "research"))) (list (nth 0 a) (nth 2 a))))
+  (got-add-thought content "research" parents))
+
+;;;###autoload
+(defun got-add-option (content &optional decision)
+  "Add an option CONTENT for the stored DECISION."
+  (interactive (let ((d (got--pick-node "Option for decision: " "decision")))
+                 (list (read-string "Option: ") d)))
+  (unless decision (user-error "An option needs a decision to belong to"))
+  (got-add-thought content "option" (list decision)))
+
+;;;###autoload
+(defun got-set-status (id status)
+  "Set the status of thought ID to STATUS."
+  (interactive
+   (let* ((id (got--pick-node "Set status of thought: "))
+          (n (got--stored-node id))
+          (choices (cdr (assoc (plist-get n :type) got-status-choices))))
+     (list id (completing-read (format "Status (%s): " (plist-get n :type))
+                               choices nil nil nil nil (plist-get n :status)))))
+  (got--modify (lambda (nodes) (got--update-node nodes id (list :status status))))
+  id)
+
+;;;###autoload
+(defun got-edit-thought (id content &optional type)
+  "Change the text of thought ID to CONTENT, and its TYPE if given."
+  (interactive
+   (let* ((id (got--pick-node "Edit thought: "))
+          (n (got--stored-node id)))
+     (list id
+           (read-string "Thought: " (plist-get n :content))
+           (completing-read "Type: " (mapcar #'car got-graph-colours) nil nil nil nil
+                            (plist-get n :type)))))
+  (when (string-blank-p content)
+    (user-error "Give the thought some text"))
+  (got--modify (lambda (nodes)
+                 (got--update-node nodes id
+                                   (append (list :content content)
+                                           (and type (list :type type))))))
+  id)
+
+;;;###autoload
+(defun got-delete-thought (id)
+  "Delete thought ID from the graph.
+Its children move up to its parents, so nothing is cut off."
+  (interactive
+   (let* ((id (got--pick-node "Delete thought: "))
+          (n (got--stored-node id)))
+     (unless (y-or-n-p (format "Delete \"%s\"? " (got--short (plist-get n :content) 40)))
+       (user-error "Cancelled"))
+     (list id)))
+  (got--modify
+   (lambda (nodes)
+     (let ((n (got--find-node nodes id)))
+       (unless n (user-error "Thought %s is not in the store" id))
+       (mapcar (lambda (c)
+                 (if (member id (plist-get c :parents))
+                     (got--plist-merge
+                      c (list :parents
+                              (cl-remove-duplicates
+                               (append (cl-remove id (plist-get c :parents) :test #'equal)
+                                       (plist-get n :parents))
+                               :test #'equal :from-end t)))
+                   c))
+               (cl-remove id nodes :key (lambda (x) (plist-get x :id)) :test #'equal)))))
+  (when (equal got--selected-id id) (setq got--selected-id nil))
+  (when (equal got--hover-id id) (setq got--hover-id nil))
+  id)
+
+;;;###autoload
+(defun got-decide (id choice)
+  "Settle decision ID by choosing the option CHOICE.
+The decision becomes \"decided\", CHOICE \"chosen\" and its sibling
+options \"rejected\"."
+  (interactive
+   (let* ((id (got--pick-node "Decide: " "decision"))
+          (kids (cl-remove-if-not
+                 (lambda (n) (member id (plist-get n :parents)))
+                 (plist-get (got--store-read (got--target-file)) :nodes)))
+          (cands (got--candidates kids)))
+     (unless cands
+       (user-error "This decision has no options yet; add some with `got-add-option'"))
+     (list id (cdr (assoc (completing-read "Choose: " (mapcar #'car cands) nil t) cands)))))
+  (got--modify
+   (lambda (nodes)
+     (let ((d (got--find-node nodes id)))
+       (unless d (user-error "Thought %s is not in the store" id))
+       (unless (equal (plist-get d :type) "decision")
+         (user-error "Thought %s is not a decision" id))
+       (unless (member id (plist-get (got--find-node nodes choice) :parents))
+         (user-error "%s is not an option of %s" choice id))
+       (mapcar (lambda (n)
+                 (cond ((equal (plist-get n :id) id)
+                        (got--plist-merge n '(:status "decided")))
+                       ((equal (plist-get n :id) choice)
+                        (got--plist-merge n '(:status "chosen")))
+                       ((and (member id (plist-get n :parents))
+                             (equal (plist-get n :type) "option"))
+                        (got--plist-merge n '(:status "rejected")))
+                       (t n)))
+               nodes))))
+  id)
+
+;;;###autoload
+(defun got-view-thought ()
+  "Show the thought under the pointer, or the last one clicked."
+  (interactive)
+  (let ((id (got--current-node-id)))
+    (unless id (user-error "Click a thought first"))
+    (got--detail id)))
+
+;;;; The interactive graph buffer
+
+(defvar-keymap got-graph-mode-map
+  :doc "Keymap for `got-graph-mode'."
+  "n"   #'got-add-thought
+  "d"   #'got-add-decision
+  "r"   #'got-add-research
+  "o"   #'got-add-option
+  "e"   #'got-expand
+  "s"   #'got-set-status
+  "D"   #'got-decide
+  "E"   #'got-edit-thought
+  "x"   #'got-delete-thought
+  "RET" #'got-view-thought
+  "l"   #'got-load
+  "g"   #'got-graph-show
+  "f"   #'got-graph-freeze)
+
+(define-minor-mode got-graph-mode
+  "Minor mode for the Graph of Thoughts buffer.
+Click a node (or hover it) to select it, then use these keys:
+\\{got-graph-mode-map}"
+  :lighter " GoT"
+  :keymap got-graph-mode-map)
+
+(put 'got-graph-mode 'permanent-local t)
+
+(defun got--on-click (id)
+  "Select thought ID and show it; run when a node is clicked."
+  (setq got--selected-id id)
+  (force-mode-line-update t)
+  (got--detail id))
+
+(defun got--on-hover (id)
+  "Remember the thought ID under the pointer, or nil when there is none."
+  (unless (equal id got--hover-id)
+    (setq got--hover-id id)
+    (force-mode-line-update t)))
+
+(defun got--header ()
+  "Return the header line of the graph buffer."
+  (let* ((id (or got--hover-id got--selected-id))
+         (n (and id got--last-graph (gethash id (plist-get got--last-graph :byid)))))
+    (replace-regexp-in-string
+     "%" "%%"
+     (concat " n thought  d decision  r research  o option  e expand  s status  "
+             "D decide  E edit  x delete  RET open  |  "
+             (if n
+                 (format "%s: %s" (plist-get n :type)
+                         (got--short (plist-get n :content) 50))
+               "click a node to select it")))))
+
+(defun got--prepare-buffer ()
+  "Set up the current graph buffer: hooks, keys and header line."
+  (add-hook 'graph-fa2-node-clicked-functions #'got--on-click nil t)
+  (add-hook 'graph-fa2-node-hovered-functions #'got--on-hover nil t)
+  (setq-local header-line-format '(:eval (got--header)))
+  (got-graph-mode 1))
+
 ;;;; Rendering with graph-fa2
 
-(defvar got--last-graph nil "The most recently parsed graph plist.")
 (defvar-local got--freeze-timer nil "Timer that freezes the graph once settled.")
 
 (defun got--radius (n)
@@ -833,11 +1318,19 @@ Scores up to 1 are read as confidences and scaled to 0-10."
           (s (+ 6.0 (* 0.6 (max 0 (min 10 s)))))
           (t 7.0))))
 
+(defun got--label (n)
+  "Return the label drawn for node N."
+  (let ((marker (cdr (assoc (plist-get n :type) got-graph-type-markers)))
+        (status (plist-get n :status)))
+    (concat marker (got--short (plist-get n :content) 36)
+            (and marker status (not (string-empty-p status))
+                 (format " (%s)" status)))))
+
 (defun got--fa2-nodes (graph)
   "Convert GRAPH's nodes into graph-fa2 node plists."
   (mapcar (lambda (n)
             (list :id (plist-get n :id)
-                  :label (got--short (plist-get n :content) 40)
+                  :label (got--label n)
                   :colour (or (cdr (assoc (plist-get n :type) got-graph-colours))
                               got-graph-default-colour)
                   :radius (got--radius n)))
@@ -862,7 +1355,7 @@ Scores up to 1 are read as confidences and scaled to 0-10."
           (nodes (got--fa2-nodes graph))
           (edges (plist-get graph :edges)))
       (with-current-buffer buf
-        (add-hook 'graph-fa2-node-clicked-functions #'got--detail nil t)
+        (got--prepare-buffer)
         (when got-graph-static
           (setq-local graph-fa2-engine '2d)))
       (pop-to-buffer buf)
@@ -870,6 +1363,8 @@ Scores up to 1 are read as confidences and scaled to 0-10."
       (condition-case err
           (graph-fa2-start buf nodes edges)
         (error (user-error "graph-fa2-start failed: %s" (error-message-string err))))
+      ;; graph-fa2 may reset buffer-local state when it starts: set up again.
+      (with-current-buffer buf (got--prepare-buffer))
       (when got-graph-static
         (got--schedule-freeze buf)))))
 
@@ -979,7 +1474,15 @@ the graph is never frozen before its frames exist."
   :doc "Keymap for `got-detail-mode'."
   :parent special-mode-map
   "e" #'got-detail-expand
-  "c" #'got-detail-add-child)
+  "c" #'got-detail-add-child
+  "n" #'got-add-thought
+  "d" #'got-add-decision
+  "r" #'got-add-research
+  "o" #'got-add-option
+  "s" #'got-set-status
+  "D" #'got-decide
+  "E" #'got-edit-thought
+  "x" #'got-delete-thought)
 
 (define-derived-mode got-detail-mode special-mode "GoT-Thought"
   "Major mode for viewing one thought.
@@ -1033,7 +1536,7 @@ the thought, \\[got-detail-add-child] adds a child thought by hand.")
               (insert "\nChildren:\n")
               (mapc #'got--link children))
             (when got--graph-file
-              (insert "\n[e] expand with the server   [c] add a child thought\n"))
+              (insert "\n[e] expand  [n] thought  [d] decision  [r] research  [o] option  [s] status  [D] decide  [E] edit  [x] delete\n"))
             (goto-char (point-min)))
           (display-buffer (current-buffer)
                           '((display-buffer-reuse-window display-buffer-pop-up-window)
@@ -1148,6 +1651,254 @@ once it is ready."
   (let ((tool (or tool (car got-tools-list)))
         (file (or file (got--store-file))))
     (got--when-ready #'got--tools (lambda () (got--ask problem tool anchor file)))))
+
+;;;; Graphing any gptel chat
+
+(defcustom got-chat-max-chars 24000
+  "Largest part of a chat sent to the model by `got-graph-from-chat'.
+Longer chats are cut at the start, keeping the most recent text."
+  :type 'natnum)
+
+(defcustom got-chat-system-prompt
+  (concat "You turn a conversation into a graph of thoughts. Read it and "
+          "output ONE ```json code block, and nothing else, of exactly this "
+          "shape: {\"nodes\":[{\"id\":\"n1\",\"type\":\"question\","
+          "\"content\":\"short text\",\"status\":\"\",\"parents\":[]}]}. "
+          "type is one of: question, hypothesis, evidence, decision, option, "
+          "research, answer, thought. Use decision for a choice that has to be "
+          "made (status open, or decided once the conversation settled it) "
+          "with an option node for each alternative, the chosen one with "
+          "status chosen and the others rejected. Use research for an idea "
+          "worth looking into (status todo). parents lists the ids of the "
+          "nodes a node follows from; nodes that start a line of thought have "
+          "none. Every id in parents must be defined in your output. Keep "
+          "each content under 200 characters and use at most 40 nodes. "
+          "Capture the reasoning that was actually in the conversation; "
+          "do not invent anything.")
+  "System prompt used by `got-graph-from-chat' to map a conversation."
+  :type 'string)
+
+(defun got--chat-text ()
+  "Return the text of the region or buffer to graph, shortened if needed."
+  (let ((text (string-trim
+               (if (use-region-p)
+                   (buffer-substring-no-properties (region-beginning) (region-end))
+                 (buffer-substring-no-properties (point-min) (point-max))))))
+    (when (string-empty-p text)
+      (user-error "Nothing to graph in this buffer"))
+    (if (> (length text) got-chat-max-chars)
+        (concat "[Earlier conversation omitted]\n"
+                (substring text (- (length text) got-chat-max-chars)))
+      text)))
+
+(defun got--extract-json (text)
+  "Return the JSON object in TEXT, from a ```json block or bare, or nil."
+  (or (with-temp-buffer
+        (insert text)
+        (got--json-block-after nil))
+      (let ((a (string-search "{" text))
+            (b (cl-position ?} text :from-end t)))
+        (and a b (> b a) (substring text a (1+ b))))))
+
+(defun got--chat-done (response info title anchor file)
+  "Handle the model's RESPONSE (and INFO) to a chat-to-graph request.
+The graph is saved with TITLE as its root, under ANCHOR, in FILE."
+  (cond
+   ((stringp response)
+    (let ((json (got--extract-json response)))
+      (if (null json)
+          (message "got: the model's reply held no JSON graph; try again")
+        (condition-case err
+            (got-graph-import-string json title anchor file)
+          (error (message "got: could not graph the chat: %s"
+                          (error-message-string err)))))))
+   ((eq response 'abort) (message "got: chat graphing cancelled"))
+   (t (message "got: the model request failed: %s"
+               (or (plist-get info :status) (plist-get info :error) "unknown error")))))
+
+;;;###autoload
+(defun got-graph-from-chat (&optional anchor)
+  "Turn this gptel chat (or the region) into a graph of thoughts.
+The conversation is sent to the model you already use in gptel, which
+maps its questions, hypotheses, decisions and research ideas into
+nodes.  The graph is saved to the project's store like any other.  With a
+prefix argument, ANCHOR it under a stored thought you pick."
+  (interactive (list (and current-prefix-arg (got--pick-node "Attach under: "))))
+  (unless (require 'gptel nil t)
+    (user-error "got: cannot load `gptel'"))
+  (let* ((text (got--chat-text))
+         (title (format "Chat: %s" (buffer-name)))
+         (file (got--store-file))
+         (gptel-use-tools nil))
+    (message "got: asking the model to map %d characters of %s ..."
+             (length text) (buffer-name))
+    (gptel-request text
+      :system got-chat-system-prompt
+      :callback (lambda (response info)
+                  (got--chat-done response info title anchor file)))))
+
+;;;; Recording from any gptel chat (tools)
+
+(defvar got--redraw-timer nil "Idle timer that redraws the graph after tool calls.")
+
+(defvar got--record-tools nil
+  "The gptel tool structs made by `got-register-gptel-tools'.")
+
+(defun got--opt-str (v)
+  "Return V trimmed if it is a non-blank string, else nil."
+  (and (stringp v) (not (string-blank-p v)) (string-trim v)))
+
+(defun got--list-arg (v)
+  "Turn a model-supplied list argument V into a list of strings."
+  (cond ((or (null v) (memq v '(:null :json-null))) nil)
+        ((stringp v) (split-string (string-trim v) "[ ,]+" t))
+        ((or (listp v) (vectorp v)) (delq nil (mapcar #'got--opt-str (append v nil))))))
+
+(defun got--schedule-redraw ()
+  "Redraw the graph soon if it is on screen, without taking focus."
+  (when (and (get-buffer got-graph-buffer-name)
+             (get-buffer-window got-graph-buffer-name t))
+    (when (timerp got--redraw-timer)
+      (cancel-timer got--redraw-timer))
+    (let ((file (got--store-file)))
+      (setq got--redraw-timer
+            (run-with-idle-timer
+             2 nil
+             (lambda ()
+               (setq got--redraw-timer nil)
+               (condition-case err
+                   (save-selected-window (got-load file))
+                 (error (message "got: could not redraw: %s"
+                                 (error-message-string err))))))))))
+
+(defmacro got--tool-safe (&rest body)
+  "Run BODY for a gptel tool; return its string, or \"Error: ...\" on failure."
+  (declare (indent 0))
+  `(condition-case err
+       (progn ,@body)
+     (error (format "Error: %s" (error-message-string err)))))
+
+(defmacro got--tool-write (&rest body)
+  "Like `got--tool-safe' for tools that change the graph.
+The graph is not redrawn at once; see `got--schedule-redraw'."
+  (declare (indent 0))
+  `(got--tool-safe
+     (prog1 (let ((got--quiet t)) ,@body)
+       (got--schedule-redraw))))
+
+(defun got--tool-list-nodes ()
+  "Tool: list the thoughts in the project's graph, one per line."
+  (got--tool-safe
+    (let* ((nodes (plist-get (got--store-read (got--store-file)) :nodes))
+           (total (length nodes)))
+      (if (null nodes)
+          "The graph is empty."
+        (concat
+         (mapconcat
+          (lambda (n)
+            (format "%s | %s | %s | %s%s"
+                    (plist-get n :id) (plist-get n :type)
+                    (if (string-empty-p (plist-get n :status)) "-" (plist-get n :status))
+                    (got--short (plist-get n :content) 80)
+                    (if (plist-get n :parents)
+                        (format " | parents: %s" (string-join (plist-get n :parents) ","))
+                      "")))
+          (last nodes 200) "\n")
+         (and (> total 200) (format "\n(showing the last 200 of %d)" total)))))))
+
+(defun got--tool-add-node (content type &optional parents status)
+  "Tool: add a thought CONTENT of TYPE under PARENTS with STATUS."
+  (got--tool-write
+    (let* ((type (downcase (or (got--opt-str type) "thought")))
+           (parents (got--list-arg parents))
+           (id (got-add-thought (got--str content) type parents (got--opt-str status))))
+      (format "Recorded %s %s%s." type id
+              (if parents (format " under %s" (string-join parents ", ")) "")))))
+
+(defun got--tool-set-status (id status)
+  "Tool: set the status of thought ID to STATUS."
+  (got--tool-write
+    (let ((id (or (got--opt-str id) (user-error "Give the id of a thought")))
+          (status (or (got--opt-str status) (user-error "Give a status"))))
+      (got-set-status id status)
+      (format "Thought %s is now %s." id status))))
+
+(defun got--tool-decide (id choice)
+  "Tool: settle decision ID by choosing the option CHOICE."
+  (got--tool-write
+    (let ((id (or (got--opt-str id) (user-error "Give the id of the decision")))
+          (choice (or (got--opt-str choice) (user-error "Give the id of the chosen option"))))
+      (got-decide id choice)
+      (format "Decision %s settled: %s chosen, its other options rejected." id choice))))
+
+(defconst got--tool-specs
+  '((:name "got_list_nodes"
+     :function got--tool-list-nodes
+     :description "List the thoughts already recorded in the project's graph of thoughts, one per line as: id | type | status | text | parents. Call this first, to find the ids to use as parents."
+     :args nil)
+    (:name "got_add_node"
+     :function got--tool-add-node
+     :description "Record a thought in the project's persistent graph of thoughts and return its id. Use it for decisions that have to be made (type decision), the alternatives of a decision (type option, with the decision as parent), ideas worth researching (type research), and for questions, hypotheses, evidence and answers that matter. Keep content to one or two sentences. Only record what the conversation actually produced."
+     :args ((:name "content" :type string
+             :description "The thought, one or two sentences.")
+            (:name "type" :type string
+             :enum ["thought" "question" "hypothesis" "evidence" "decision" "option" "research" "answer"]
+             :description "What kind of thought this is.")
+            (:name "parents" :type array :items (:type string) :optional t
+             :description "Ids of the thoughts this one follows from, as listed by got_list_nodes or returned by earlier got_add_node calls. Omit for a new line of thought.")
+            (:name "status" :type string :optional t
+             :description "Optional. Decisions: open or decided. Research: todo, in-progress, done. Options: candidate, chosen, rejected.")))
+    (:name "got_set_status"
+     :function got--tool-set-status
+     :description "Change the status of a recorded thought, for example mark a research idea done."
+     :args ((:name "id" :type string :description "Id of the thought.")
+            (:name "status" :type string :description "The new status, for example done.")))
+    (:name "got_decide"
+     :function got--tool-decide
+     :description "Settle a recorded decision by choosing one of its options. The decision becomes decided, the chosen option chosen and its other options rejected."
+     :args ((:name "id" :type string :description "Id of the decision.")
+            (:name "choice" :type string :description "Id of the chosen option."))))
+  "Specifications of the gptel tools that record into the graph.")
+
+;;;###autoload
+(defun got-register-gptel-tools ()
+  "Define the gptel tools that record into the graph and return them.
+They appear in gptel's tool menu under the category \"got\"."
+  (interactive)
+  (unless (require 'gptel nil t)
+    (user-error "got: cannot load `gptel'"))
+  (unless (fboundp 'gptel-make-tool)
+    (user-error "This gptel has no tool support; please upgrade it"))
+  (setq got--record-tools
+        (mapcar (lambda (spec)
+                  (apply #'gptel-make-tool (append spec (list :category "got"))))
+                got--tool-specs)))
+
+;;;###autoload
+(defun got-enable-chat-tools ()
+  "Let the model in this gptel chat record into the project's graph.
+It can list, add and update thoughts, decisions and research ideas as the
+conversation goes.  Use `got-disable-chat-tools' to turn it off again."
+  (interactive)
+  (let* ((tools (got-register-gptel-tools))
+         (names (mapcar #'gptel-tool-name tools)))
+    (setq-local gptel-use-tools t)
+    (setq-local gptel-tools
+                (append (cl-remove-if (lambda (tl) (member (gptel-tool-name tl) names))
+                                      gptel-tools)
+                        tools))
+    (message "got: this chat can now record into %s"
+             (abbreviate-file-name (got--store-file)))))
+
+;;;###autoload
+(defun got-disable-chat-tools ()
+  "Remove the recording tools from this gptel chat."
+  (interactive)
+  (let ((names (mapcar (lambda (s) (plist-get s :name)) got--tool-specs)))
+    (setq-local gptel-tools
+                (cl-remove-if (lambda (tl) (member (gptel-tool-name tl) names))
+                              gptel-tools))
+    (message "got: recording tools removed from this chat")))
 
 ;;;; Demo
 

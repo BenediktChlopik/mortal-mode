@@ -29,8 +29,8 @@
 ;; (or pick the "flymake" category in `gptel-menu' -> Tools).
 ;;
 ;; PRIVACY: tool results (diagnostics and source code) are sent to the model
-;; backend that gptel is configured with.  By default every tool call asks for
-;; confirmation first (`gptel-flymake-confirm-tool-calls').
+;; backend that gptel is configured with.  The tools run without asking for
+;; confirmation.
 
 ;;; Code:
 
@@ -48,11 +48,6 @@
 (defcustom gptel-flymake-category "flymake"
   "gptel tool category used for the Flymake tools."
   :type 'string)
-
-(defcustom gptel-flymake-confirm-tool-calls t
-  "If non-nil, ask before the model may read diagnostics or source code.
-Takes effect when the tools are (re-)registered, e.g. by `gptel-flymake-enable'."
-  :type 'boolean)
 
 (defcustom gptel-flymake-context-lines 3
   "Default number of source lines shown before and after each diagnostic."
@@ -178,7 +173,7 @@ of source lines shown around each diagnostic."
                      (or (null end) (<= line end)))
             (push (cons d pos) rows))))
       (setq rows (nreverse rows))
-      (let ((shown (seq-take rows gptel-flymake-max-diagnostics))
+      (let* ((shown (seq-take rows gptel-flymake-max-diagnostics))
             (header
              (concat
               (format "Buffer: %s (mode: %s)%s\n"
@@ -320,7 +315,6 @@ Use flymake_recheck." (mapconcat #'symbol-name running ", "))
 (defun gptel-flymake-register ()
   "Create and register the Flymake tools with gptel.  Return the tool list."
   (let ((cat gptel-flymake-category)
-        (confirm gptel-flymake-confirm-tool-calls)
         (buffer-arg '(:name "buffer"
                       :type string
                       :optional t
@@ -334,8 +328,7 @@ recently used buffer that has Flymake enabled.")))
             :description "List Emacs buffers that have Flymake enabled, with their \
 major mode and the number of errors, warnings and notes."
             :args nil
-            :category cat
-            :confirm confirm)
+            :category cat)
            (gptel-make-tool
             :name "flymake_diagnostics"
             :function (gptel-flymake--wrap #'gptel-flymake--tool-diagnostics)
@@ -362,8 +355,7 @@ errors or warnings in the user's code."
                           :optional t
                           :description "Source lines to show before and after each \
 diagnostic (0 for none)."))
-            :category cat
-            :confirm confirm)
+            :category cat)
            (gptel-make-tool
             :name "flymake_read_lines"
             :function (gptel-flymake--wrap #'gptel-flymake--tool-read-lines)
@@ -379,8 +371,7 @@ part of the text."
                           :type integer
                           :optional t
                           :description "Last line to read (default: a capped block)."))
-            :category cat
-            :confirm confirm)
+            :category cat)
            (gptel-make-tool
             :name "flymake_recheck"
             :function (gptel-flymake--wrap-async #'gptel-flymake--tool-recheck)
@@ -389,8 +380,7 @@ part of the text."
 the fresh diagnostics.  Use it to verify whether a fix has resolved the \
 diagnostics.  Does not modify the buffer."
             :args (list buffer-arg)
-            :category cat
-            :confirm confirm)))))
+            :category cat)))))
 
 ;;;###autoload
 (defun gptel-flymake-enable ()

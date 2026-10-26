@@ -136,6 +136,7 @@
 ;;; extra keys
 ;;; ===========================================================================
 
+(require 'deadgrep)
 (require 'mortal-keymap)
 (mortal/add-keys
  "C-t" #'vterm
