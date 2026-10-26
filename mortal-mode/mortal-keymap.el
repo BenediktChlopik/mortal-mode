@@ -652,6 +652,12 @@ KEY is a string understood by `kbd'."
 (mortal/define-key-dynamic-fallback
  mortal-map (kbd "<down>") #'mortal/deselect-next-line)
 
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "<backspace>") #'mortal/backward-delete-whitespace)
+
+(mortal/define-key-dynamic-fallback
+ mortal-map (kbd "delete") #'mortal/forward-delete-whitespace)
+
 
 ;; Tab selection keys.
 (dotimes (i 9)
@@ -672,8 +678,6 @@ KEY is a string understood by `kbd'."
  "<escape>" #'mortal/quit
 
  ;; better deletion
- "<backspace>" #'mortal/backward-delete-whitespace
- "<delete>" #'mortal/forward-delete-whitespace
  "C-<backspace>" #'mortal/backward-delete-word
  "C-<delete>" #'mortal/forward-delete-word
 
