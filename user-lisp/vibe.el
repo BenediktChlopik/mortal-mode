@@ -31,6 +31,32 @@
    (window-height . 0.3)))
 
 
+
+
+;;; ===========================================================================
+;;; AI-Assisted Editing: Macher
+;;; ===========================================================================
+
+(defun vibe/macher-action-buffer-setup ()
+  (setq-local window-point-insertion-type t)
+  (visual-line-mode 1))
+
+(use-package macher
+  :after gptel
+  :custom
+  (macher-action-buffer-ui 'org)
+  :hook
+  (macher-action-buffer-setup . vibe/macher-action-buffer-setup)
+  :config
+  (macher-install)
+  (macher-enable)
+  (add-to-list
+   'display-buffer-alist
+   '("\\*macher-patch:.*\\*"
+     (display-buffer-in-side-window)
+     (side . right))))
+
+
 ;;; ===========================================================================
 ;;; AI Chat: gptel
 ;;; Command: M-x gptel
@@ -45,7 +71,7 @@
   :demand t
   :config
   (require 'gptel-integrations)
-
+  (require 'macher)
   (require 'gptel-continue)
   (require 'pyscn-gptel)
   (pyscn-gptel-register)
@@ -70,6 +96,10 @@
                                 ("flymake" "flymake_read_lines")
                                 ("flymake" "flymake_recheck")
                                 ("vterm" "vterm_type")
+                                ("vterm" "vterm_read")
+                                ("macher" "search_in_workspace")
+                                ("macher" "list_directory_in_workspace")
+                                ("macher" "read_file_in_workspace")
                                 ("pyscn" "pyscn_analyze_code")
                                 ("pyscn" "pyscn_check_complexity")
                                 ("pyscn" "pyscn_detect_clones")
@@ -89,47 +119,29 @@
 
 
 ;;; ===========================================================================
-;;; AI-Assisted Editing: Macher
-;;; ===========================================================================
-
-  (defun vibe/macher-action-buffer-setup ()
-    (setq-local window-point-insertion-type t)
-    (visual-line-mode 1))
-
-  (use-package macher
-    :after gptel
-    :custom
-    (macher-action-buffer-ui 'org)
-    :hook
-    (macher-action-buffer-setup . vibe/macher-action-buffer-setup)
-    :config
-    (macher-install)
-    (macher-enable)
-    (add-to-list
-     'display-buffer-alist
-     '("\\*macher-patch:.*\\*"
-       (display-buffer-in-side-window)
-       (side . right))))
-
-
-;;; ===========================================================================
 ;;; Graph of Thoughts: got
 ;;; Commands: M-x got-start, M-x got-stop, M-x got-tools, M-x got-ask
 ;;; ===========================================================================
 
-  (use-package got
-    :ensure nil
-    :after (gptel mcp)
-    :load-path "/usr/bin/emacs"
-    :commands (got-start got-stop got-tools got-ask))
+(use-package got
+  :ensure nil
+  :after (gptel mcp)
+  :load-path "/usr/bin/emacs"
+  :commands (got-start got-stop got-tools got-ask))
 
 
 ;;; ===========================================================================
 ;;; Graph Visualization: graph-fa2
 ;;; ===========================================================================
 
-  (use-package graph-fa2
-    :vc (:url "https://github.com/elij/graph-fa2"))
+(use-package graph-fa2
+  :load-path "~/projects/graph-fa2"
+  :custom
+  (graph-fa2-engine '3d)
+  (graph-fa2-framerate 60.0))
+
+(setq got-server-script
+      "/home/raptus/projects/Adaptive-Graph-of-Thoughts-MCP-server/launch.sh")
 
 
 ;;; ===========================================================================
@@ -146,3 +158,4 @@
 ;;; ===========================================================================
 ;;; End of Configuration
 ;;; ===========================================================================
+ 

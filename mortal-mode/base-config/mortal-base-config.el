@@ -108,7 +108,7 @@
 ;;; Tab line
 
 (setq tab-line-close-button-show nil)
-
+(require 'tab-line-drag)
 
 ;;; Hide minor modes
 

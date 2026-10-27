@@ -155,17 +155,51 @@ Emacs runs it as a child process and talks MCP over its stdin and stdout."
   "Name under which the server is registered in `mcp-hub-servers'."
   :type 'string)
 
+;; The directory this file was loaded from, for the bundled shim.
+(defconst got--directory
+  (file-name-directory (or load-file-name buffer-file-name default-directory)))
+
+(defcustom got-use-shim t
+  "Non-nil means start the server through the bundled `got-shim.py'.
+The Adaptive Graph of Thoughts server answers `initialize' without the
+protocolVersion mcp.el insists on; the shim repairs that reply."
+  :type 'boolean)
+
+(defcustom got-shim-python "python3"
+  "Python interpreter that runs `got-shim.py'."
+  :type 'string)
+
+(defun got--shim-file ()
+  "Return the full name of the bundled shim script."
+  (expand-file-name "got-shim.py" got--directory))
+
+(defun got--launch ()
+  "Return the (COMMAND . ARGS) that mcp.el should run for the server."
+  (let ((script (expand-file-name got-server-script)))
+    (if (and got-use-shim (file-exists-p (got--shim-file)))
+        (cons got-shim-python
+              (cons (got--shim-file) (cons script got-server-args)))
+      (cons script got-server-args))))
+
+(defcustom got-ask-all-mcp-tools t
+  "Non-nil means the `got-ask' chat gets the tools of every MCP server.
+Only servers mcp.el is already connected to count (see `mcp-hub'); nil
+gives the chat just the GoT server's own tools."
+  :type 'boolean)
+
 (defcustom got-start-timeout 30
   "Seconds to wait for a lazily started server before giving up."
   :type 'number)
 
-(defcustom got-tools-list
-  '("scientific_reasoning_query"
-    "analyze_research_hypothesis"
-    "explore_scientific_relationships"
-    "validate_scientific_claims")
-  "Server tools `got-ask' can call.  The first is the default."
+(defcustom got-tools-list nil
+  "Server tools `got-ask' can call.  The first is the default.
+Nil means use whatever tools the connected server lists, falling back to
+`got-fallback-tool' (the Adaptive Graph of Thoughts server has one tool,
+graph_reasoning)."
   :type '(repeat string))
+
+(defconst got-fallback-tool "graph_reasoning"
+  "Tool `got-ask' names when neither `got-tools-list' nor the server say.")
 
 (defcustom got-ask-prompt
   (concat "Call the `%1$s' tool with the text below as its query or main "
@@ -324,22 +358,77 @@ If it never does, the graph is left running, never blank."
       (user-error "`got-server-script' is not executable (chmod +x %s)" script))
     (setq mcp-hub-servers
           (cons `(,got-server-name
-                  :command ,script
-                  ,@(and got-server-args `(:args ,got-server-args))
+                  :command ,(car (got--launch))
+                  ,@(and (cdr (got--launch)) `(:args ,(cdr (got--launch))))
                   ,@(and got-server-env `(:env ,(got--env-plist))))
                 (cl-remove got-server-name mcp-hub-servers
                            :key #'car :test #'equal)))))
 
-(defun got--connected-p ()
-  "Return non-nil when mcp.el has a connection to the server."
+(declare-function jsonrpc-running-p "jsonrpc" (connection))
+
+(defun got--connection ()
+  "Return mcp.el's connection object for the server, live or not, or nil."
   (and (boundp 'mcp-server-connections)
        (hash-table-p mcp-server-connections)
        (gethash got-server-name mcp-server-connections)))
 
+(defun got--connected-p ()
+  "Return the connection when mcp.el has a live one to the server, else nil.
+A leftover entry whose process died (a failed start) does not count."
+  (let ((conn (got--connection)))
+    (and conn
+         (or (not (fboundp 'jsonrpc-running-p))
+             (ignore-errors (jsonrpc-running-p conn)))
+         conn)))
+
+(defun got--server-tool-names ()
+  "Return the names of the tools mcp.el sees on the server, or nil."
+  (let ((conn (got--connected-p)))
+    (and conn (fboundp 'mcp--tools)
+         (ignore-errors
+           (mapcar (lambda (tl) (got--str (plist-get tl :name)))
+                   (mcp--tools conn))))))
+
+(defun got--default-tool ()
+  "Return the tool name to call when none is given."
+  (or (car got-tools-list) (car (got--server-tool-names)) got-fallback-tool))
+
 (defun got--tools ()
-  "Return gptel tool structs registered for the GoT server, or nil."
-  (and (featurep 'gptel)
-       (ignore-errors (gptel-get-tool (list (concat "mcp-" got-server-name))))))
+  "Return the gptel tool structs of the GoT server, or nil.
+Looks in gptel's registry for the category \"mcp-NAME\" first, then for
+tools in any category whose names the server lists."
+  (when (and (featurep 'gptel) (boundp 'gptel--known-tools)
+             (fboundp 'gptel-tool-name))
+    (let ((cat (assoc (concat "mcp-" got-server-name) gptel--known-tools)))
+      (or (mapcar #'cdr (cdr cat))
+          (let ((names (got--server-tool-names)))
+            (and names
+                 (cl-loop for c in gptel--known-tools
+                          append (cl-loop for e in (cdr c)
+                                          when (member (car e) names)
+                                          collect (cdr e)))))
+          (ignore-errors
+            (gptel-get-tool (list (concat "mcp-" got-server-name))))))))
+
+(defun got--all-mcp-tools ()
+  "Return every gptel tool that comes from a connected MCP server.
+The GoT server's own tools come first."
+  (let ((mine (got--tools))
+        (others (and (featurep 'gptel) (boundp 'gptel--known-tools)
+                     (cl-loop for c in gptel--known-tools
+                              when (string-prefix-p "mcp-" (car c))
+                              append (mapcar #'cdr (cdr c))))))
+    (cl-remove-duplicates (append mine others) :test #'eq :from-end t)))
+
+(defun got--timeout-message ()
+  "Return a message saying which part of the start never happened."
+  (format "got: server not ready after %ss: %s.  Run M-x got-probe for a full report."
+          got-start-timeout
+          (cond ((not (got--connected-p))
+                 "mcp.el never connected (see *Messages* and M-x mcp-hub)")
+                ((null (got--tools))
+                 "mcp.el is connected but gptel has no tools for it")
+                (t "unknown"))))
 
 ;;;###autoload
 (defun got-start ()
@@ -347,6 +436,9 @@ If it never does, the graph is left running, never blank."
   (interactive)
   (got--load-backend)
   (got--register)
+  ;; Drop a dead leftover connection so mcp.el starts afresh.
+  (when (and (got--connection) (not (got--connected-p)))
+    (ignore-errors (mcp-stop-server got-server-name)))
   (setq got--starting t)
   (message "got: starting %s ..." got-server-name)
   (gptel-mcp-connect (list got-server-name) nil))
@@ -384,8 +476,7 @@ If it never does, the graph is left running, never blank."
             (error (message "got: %s" (error-message-string err)))))
          ((> now deadline)
           (setq got--starting nil)
-          (message "got: server not ready after %ss; try M-x got-probe, or see *Messages* and M-x mcp-hub"
-                   got-start-timeout))
+          (message "%s" (got--timeout-message)))
          (t (push w pending)))))
     ;; Operations queued by callbacks while we ran stay after the old ones.
     (setq got--waiters (append (nreverse pending) got--waiters))
@@ -398,7 +489,8 @@ When the server is not up yet this returns at once and FN runs later.
 Several waiting operations share one polling timer."
   (if (funcall ready-p)
       (funcall fn)
-    (unless (or got--starting (got--connected-p))
+    ;; A start flag with nobody waiting is left over from a failed attempt.
+    (unless (or (and got--starting got--waiters) (got--connected-p))
       (got-start))
     (message "got: waiting for the server, will continue when it is ready...")
     (setq got--waiters
@@ -458,13 +550,22 @@ Several waiting operations share one polling timer."
         (and (got--alistp j) j))
     (error nil)))
 
-(defun got--probe (script &optional args env timeout)
+(defcustom got-probe-call-timeout 180
+  "Seconds `got-probe' waits for the answer to a test tool call.
+The server may query PubMed, Google Scholar and Exa, so this can be slow."
+  :type 'number)
+
+(defun got--probe (script &optional args env timeout call)
   "Run SCRIPT with ARGS and ENV as an MCP stdio server and talk to it.
 ENV is an alist of (NAME . VALUE).  Waits up to TIMEOUT seconds for each
-reply.  Returns a plist: :command, :lines (all stdout lines), :non-json
-\(stdout lines that are not JSON objects), :stderr, :init and :tools-reply
-\(the parsed replies or nil), :tools (their names) and :exit (the exit
-status if the server ended by itself, else nil)."
+reply.  CALL is nil or (TOOL . QUERY): after the handshake the tool TOOL
+\(or the server's first tool if it has no TOOL) is called with QUERY, and
+the answer awaited for `got-probe-call-timeout' seconds.  Returns a
+plist: :command, :lines (all stdout lines), :non-json (stdout lines that
+are not JSON objects), :stderr, :init and :tools-reply (the parsed
+replies or nil), :tool-defs and :tools (the tools listed and their
+names), :exit (the exit status if the server ended by itself), and for a
+test call :call-tool, :call-note, :call-reply and :call-line."
   (let* ((timeout (or timeout got-probe-timeout))
          (out "")
          (err-buf (generate-new-buffer " *got-probe-stderr*"))
@@ -473,21 +574,24 @@ status if the server ended by itself, else nil)."
                   process-environment))
          (proc (make-process :name "got-probe" :command (cons script args)
                              :connection-type 'pipe :noquery t :buffer nil
-                             :stderr err-buf
+                             :coding 'utf-8-unix :stderr err-buf
                              :filter (lambda (_p s) (setq out (concat out s)))))
          (complete (lambda () (butlast (split-string out "\n"))))
+         (line-for (lambda (id)
+                     (cl-find-if (lambda (l)
+                                   (let ((j (got--probe-parse l)))
+                                     (and j (equal (alist-get 'id j) id))))
+                                 (funcall complete))))
          (reply (lambda (id)
-                  (cl-some (lambda (l)
-                             (let ((j (got--probe-parse l)))
-                               (and j (equal (alist-get 'id j) id) j)))
-                           (funcall complete))))
+                  (let ((l (funcall line-for id)))
+                    (and l (got--probe-parse l)))))
          (wait (lambda (pred secs)
                  (let ((deadline (+ (float-time) secs)))
                    (while (and (not (funcall pred)) (process-live-p proc)
                                (< (float-time) deadline))
                      (accept-process-output proc 0.1))
                    (accept-process-output proc 0.05))))
-         init tools-reply exit)
+         init tools-reply exit call-tool call-note call-line call-reply)
     (unwind-protect
         (progn
           ;; Some servers announce themselves; give them a moment.
@@ -501,11 +605,44 @@ status if the server ended by itself, else nil)."
             (process-send-string proc (concat got--probe-list-tools "\n"))
             (funcall wait (lambda () (funcall reply 2)) timeout)
             (setq tools-reply (funcall reply 2)))
+          (when (and call tools-reply (process-live-p proc))
+            (let* ((tools (alist-get 'tools (alist-get 'result tools-reply)))
+                   (tool (or (cl-find (car call) tools
+                                      :key (lambda (tl) (alist-get 'name tl))
+                                      :test #'equal)
+                             (car tools)))
+                   (props (alist-get 'properties (alist-get 'inputSchema tool)))
+                   (key (if (assq 'query props)
+                            'query
+                          (car (cl-find-if
+                                (lambda (p) (equal "string" (alist-get 'type (cdr p))))
+                                props)))))
+              (cond
+               ((null tool) (setq call-note "the server lists no tools to call"))
+               ((null key)
+                (setq call-note (format "cannot tell which argument of %s takes the query"
+                                        (alist-get 'name tool))))
+               (t
+                (setq call-tool (alist-get 'name tool))
+                (unless (equal call-tool (car call))
+                  (setq call-note (format "%s is not on this server, so %s was called instead"
+                                          (car call) call-tool)))
+                (process-send-string
+                 proc
+                 (concat (json-encode
+                          `((jsonrpc . "2.0") (id . 3) (method . "tools/call")
+                            (params . ((name . ,call-tool)
+                                       (arguments . ((,key . ,(cdr call))))))))
+                         "\n"))
+                (funcall wait (lambda () (funcall reply 3)) got-probe-call-timeout)
+                (setq call-reply (funcall reply 3)
+                      call-line (funcall line-for 3))))))
           (unless (process-live-p proc)
             (setq exit (process-exit-status proc))))
       (when (process-live-p proc) (delete-process proc)))
     (let* ((lines (delete "" (funcall complete)))
-           (stderr (with-current-buffer err-buf (buffer-string))))
+           (stderr (with-current-buffer err-buf (buffer-string)))
+           (defs (alist-get 'tools (alist-get 'result tools-reply))))
       (kill-buffer err-buf)
       (list :command (cons script args)
             :lines lines
@@ -513,20 +650,116 @@ status if the server ended by itself, else nil)."
             :stderr stderr
             :init init
             :tools-reply tools-reply
-            :tools (mapcar (lambda (tl) (got--str (alist-get 'name tl)))
-                           (alist-get 'tools (alist-get 'result tools-reply)))
-            :exit exit))))
+            :tool-defs defs
+            :tools (mapcar (lambda (tl) (got--str (alist-get 'name tl))) defs)
+            :exit exit
+            :call-tool call-tool :call-note call-note
+            :call-reply call-reply :call-line call-line))))
+
+(defun got--probe-log-errors (stderr)
+  "Return the last few error messages found in the server's STDERR text.
+Only real error levels count (loguru's ERROR and CRITICAL, Python
+logging's ERROR: prefix, tracebacks), never ordinary lines that merely
+contain the word."
+  (let ((case-fold-search nil)
+        found)
+    (dolist (l (split-string stderr "\n" t))
+      (cond
+       ((string-match "\\(?:ERROR\\|CRITICAL\\) +| +\\(.*\\)\\'" l)
+        (let ((msg (match-string 1 l)))
+          (push (if (string-match " - " msg) (substring msg (match-end 0)) msg)
+                found)))
+       ((string-match-p
+         "\\`\\(?:Traceback\\|ERROR:\\|CRITICAL:\\|[A-Za-z_.]+\\(?:Error\\|Exception\\):\\)" l)
+        (push l found))))
+    (mapcar (lambda (l) (truncate-string-to-width (string-trim l) 220 nil nil "…"))
+            (last (nreverse found) 3))))
+
+(defun got--probe-signature (tool)
+  "Return a one-line signature of the MCP tool description TOOL."
+  (let* ((schema (alist-get 'inputSchema tool))
+         (props (alist-get 'properties schema))
+         (required (alist-get 'required schema))
+         (desc (alist-get 'description tool)))
+    (format "%s(%s)%s%s"
+            (alist-get 'name tool)
+            (mapconcat (lambda (p)
+                         (let* ((sch (cdr p)) (def (alist-get 'default sch)))
+                           (format "%s: %s%s" (car p) (or (alist-get 'type sch) "any")
+                                   (if def (format " = %s" def) ""))))
+                       props ", ")
+            (if required
+                (format " [required: %s]" (string-join (mapcar #'got--str required) ", "))
+              "")
+            (if desc (format " - %s" desc) ""))))
+
+(defun got--probe-server-name (result)
+  "Return a name and version for the server from its initialize RESULT."
+  (let ((si (alist-get 'serverInfo result)))
+    (string-trim
+     (cond (si (format "%s %s" (alist-get 'name si) (alist-get 'version si)))
+           ((alist-get 'server_name result)
+            (format "%s %s" (alist-get 'server_name result)
+                    (or (alist-get 'server_version result) "")))
+           (t "unnamed")))))
+
+(defun got--probe-config-findings (r)
+  "Compare the tools in probe result R with the `got.el' settings."
+  (when (plist-get r :tools)
+    (let* ((have (plist-get r :tools))
+           (missing (cl-remove-if (lambda (n) (member n have)) got-tools-list)))
+      (if missing
+          (list (format "`got-tools-list' names tools this server does not have: %s. It has: %s. Set `got-tools-list' to nil to use the server's own."
+                        (string-join missing ", ") (string-join have ", ")))
+        (list (format "got-ask will call: %s." (or (car got-tools-list) (car have))))))))
+
+(defun got--probe-call-findings (r)
+  "Explain the test tool call in probe result R, if one was made."
+  (let ((reply (plist-get r :call-reply))
+        (tool (plist-get r :call-tool))
+        out)
+    (when (plist-get r :call-note)
+      (push (format "test call: %s." (plist-get r :call-note)) out))
+    (cond
+     ((and tool (null reply))
+      (push (format "test call of %s got no reply within %ss." tool got-probe-call-timeout)
+            out))
+     (reply
+      (if-let* ((err (alist-get 'error reply)))
+          (push (format "test call of %s failed: code %s, \"%s\"." tool
+                        (alist-get 'code err) (alist-get 'message err))
+                out)
+        (let ((nodes (condition-case nil
+                         (got--parse-nodes (plist-get r :call-line))
+                       (error nil))))
+          (if nodes
+              (push (format "test call of %s answered; graph found: %d thoughts (%s)."
+                            tool (length nodes)
+                            (string-join
+                             (mapcar (lambda (g) (format "%s %d" (car g) (cdr g)))
+                                     (let (counts)
+                                       (dolist (n nodes)
+                                         (cl-incf (alist-get (plist-get n :type) counts 0
+                                                             nil #'equal)))
+                                       (nreverse counts)))
+                             ", "))
+                    out)
+            (push (format "test call of %s answered, but no graph-shaped data was found in it (the result is %s). Send me the raw reply below so the parser can be fitted."
+                          tool (got--shape (alist-get 'result reply)))
+                  out))))))
+    (nreverse out)))
 
 (defun got--probe-verdicts (r)
   "Return a list of plain-language findings for the probe result R."
   (let* ((init (plist-get r :init))
+         (result (and init (alist-get 'result init)))
          (err (and init (alist-get 'error init)))
          (finding nil))
     (cl-flet ((add (fmt &rest a) (push (apply #'format fmt a) finding)))
       (when (plist-get r :exit)
         (add "The server exited by itself (status %s)%s."
              (plist-get r :exit)
-             (if (and init (alist-get (quote result) init)) "" " before finishing the handshake")))
+             (if result "" " before finishing the handshake")))
       (when (plist-get r :non-json)
         (add "stdout has lines that are not JSON, which breaks MCP over stdio: %S. Make launch.sh send logs and banners to stderr."
              (truncate-string-to-width (car (plist-get r :non-json)) 100 nil nil "…")))
@@ -540,10 +773,13 @@ status if the server ended by itself, else nil)."
                ""))
         (when (equal (alist-get 'code err) -32602)
           (add "-32602 (invalid parameters) is sometimes a server's catch-all for an internal error; the server's own log below usually names the real cause.")))
-       ((and init (alist-get 'result init))
-        (add "initialize succeeded (server: %s)."
-             (let ((si (alist-get 'serverInfo (alist-get 'result init))))
-               (if si (format "%s %s" (alist-get 'name si) (alist-get 'version si)) "unnamed")))
+       (result
+        (add "initialize succeeded (server: %s)." (got--probe-server-name result))
+        (unless (alist-get 'protocolVersion result)
+          (add "The initialize reply has no protocolVersion, which mcp.el rejects (\"protocolVersion(nil) not support\").%s"
+               (if got-use-shim
+                   " `got-use-shim' is on, so got-shim.py repairs it for mcp.el."
+                 " Set `got-use-shim' to t.")))
         (cond ((plist-get r :tools) (add "tools: %s." (string-join (plist-get r :tools) ", ")))
               ((plist-get r :tools-reply)
                (add "tools/list gave no tools: %s"
@@ -551,28 +787,84 @@ status if the server ended by itself, else nil)."
               (t (add "no reply to tools/list."))))
        ((not (plist-get r :exit))
         (add "no reply to initialize; the server may be slow to start or not speak MCP on stdio.")))
-      (let ((errors (cl-remove-if-not
-                     (lambda (l) (string-match-p "\\<\\(?:ERROR\\|CRITICAL\\|Traceback\\)\\>" l))
-                     (split-string (plist-get r :stderr) "\n" t))))
-        (dolist (l (cl-subseq errors 0 (min 2 (length errors))))
-          (add "server log: %s"
-               (truncate-string-to-width (string-trim l) 220 nil nil "…"))))
-      (when (and init (alist-get 'result init) (plist-get r :tools)
-                 (not (plist-get r :non-json)))
+      (dolist (f (got--probe-config-findings r)) (push f finding))
+      (dolist (f (got--probe-call-findings r)) (push f finding))
+      (dolist (l (got--probe-log-errors (plist-get r :stderr)))
+        (add "server log: %s" l))
+      (when (and result (plist-get r :tools) (not (plist-get r :non-json)))
         (add "The handshake works by hand, so mcp.el should be able to connect.")))
     (nreverse finding)))
 
+(defun got--emacs-side ()
+  "Return plain-language lines about the mcp.el and gptel side of the link."
+  (let* ((entry (and (boundp 'mcp-hub-servers) (assoc got-server-name mcp-hub-servers)))
+         (conn (got--connected-p))
+         (seen (got--server-tool-names))
+         (cats (and (boundp 'gptel--known-tools)
+                    (mapcar (lambda (c) (format "%s (%d)" (car c) (length (cdr c))))
+                            gptel--known-tools)))
+         (mine (got--tools))
+         (names (and mine (fboundp 'gptel-tool-name)
+                     (ignore-errors (mapcar #'gptel-tool-name mine))))
+         (bufs (cl-remove-if-not
+                (lambda (b)
+                  (string-match-p (concat "\\*mcp\\|jsonrpc\\|\\*" (regexp-quote got-server-name))
+                                  (buffer-name b)))
+                (buffer-list)))
+         out)
+    (cl-flet ((add (fmt &rest a) (push (apply #'format fmt a) out)))
+      (add "mcp.el: %s."
+           (if (or (featurep 'mcp) (featurep 'mcp-hub)) "loaded"
+             "not loaded yet (it loads on the first operation)"))
+      (add "server registered in mcp-hub-servers: %s."
+           (if entry (format "yes, command %s %s" (plist-get (cdr entry) :command)
+                             (string-join (plist-get (cdr entry) :args) " "))
+             "no (M-x got-start registers it)"))
+      (when (and entry got-use-shim
+                 (not (equal (plist-get (cdr entry) :command) (car (got--launch)))))
+        (add "STALE: the registered command is not the shim, so the server is started without the repair. Run M-x got-stop, then M-x got-start (it re-registers)."))
+      (when (and (got--connection) (not conn))
+        (add "STALE: mcp.el holds a dead connection for this server (a failed start). M-x got-start clears it."))
+      (add "mcp.el connection: %s."
+           (if conn (format "yes, tools seen: %s" (string-join seen ", ")) "no"))
+      (add "gptel: %s; tool categories: %s."
+           (if (featurep 'gptel) "loaded" "not loaded yet")
+           (if cats (string-join cats ", ") "none"))
+      (add "gptel tools for this server: %d%s." (length mine)
+           (if names (format " (%s)" (string-join names ", ")) ""))
+      (add "pending: start requested %s, %d operation(s) waiting."
+           (if got--starting "yes" "no") (length got--waiters))
+      (when bufs
+        (add "log buffers worth reading: %s." (mapconcat #'buffer-name bufs ", ")))
+      (cond
+       ((and conn (null mine))
+        (add "DIAGNOSIS: mcp.el is connected but gptel has no tools for it, so got-ask keeps waiting. gptel registers MCP tools after the connection, under a category named from the server; compare the categories above with `mcp-%s'." got-server-name))
+       ((not conn)
+        (add "DIAGNOSIS: mcp.el has no connection to the server. Run M-x got-start, then read *Messages* and the log buffers above."))))
+    (nreverse out)))
+
 ;;;###autoload
-(defun got-probe ()
+(defun got-probe (&optional query)
   "Test the server by hand and explain what it answers.
 Runs `got-server-script' as a child process, sends the standard MCP
-handshake and lists the raw replies.  Use it when `got-start' fails."
-  (interactive)
+handshake, lists the tools and compares everything with your settings
+and with what mcp.el and gptel currently hold.  Use it when `got-start'
+or `got-ask' fails.
+
+With a prefix argument it also calls the server's tool with QUERY, which
+runs the real reasoning pipeline (it may query PubMed, Google Scholar
+and Exa and take minutes), and checks whether the answer holds a graph."
+  (interactive
+   (list (and current-prefix-arg
+              (read-string "Test query (runs the real tool, may take minutes): "
+                           "What are the main trade-offs between SQL and NoSQL databases?"))))
   (let ((script (expand-file-name got-server-script)))
     (unless (file-executable-p script)
       (user-error "`got-server-script' %s is missing or not executable" script))
-    (message "got: probing %s (up to %ss per step) ..." script got-probe-timeout)
-    (let ((r (got--probe script got-server-args got-server-env)))
+    (message "got: probing %s (up to %ss per step%s) ..." script got-probe-timeout
+             (if query (format ", %ss for the test call" got-probe-call-timeout) ""))
+    (let ((r (got--probe script got-server-args got-server-env nil
+                         (and query (cons (got--default-tool) query)))))
       (with-current-buffer (get-buffer-create "*got-probe*")
         (let ((inhibit-read-only t))
           (erase-buffer)
@@ -580,12 +872,24 @@ handshake and lists the raw replies.  Use it when `got-start' fails."
           (insert "Findings\n")
           (dolist (f (got--probe-verdicts r))
             (insert "  - " f "\n"))
+          (insert "\nTools the server lists\n")
+          (if (plist-get r :tool-defs)
+              (dolist (tl (plist-get r :tool-defs))
+                (insert "  " (got--probe-signature tl) "\n"))
+            (insert "  (none)\n"))
+          (insert "\nEmacs side (mcp.el and gptel)\n")
+          (dolist (l (got--emacs-side))
+            (insert "  - " l "\n"))
           (insert "\nstdout, line by line\n")
           (if (plist-get r :lines)
               (dolist (l (plist-get r :lines))
                 (insert (if (got--probe-parse l) "  json  " "  TEXT  ")
                         (truncate-string-to-width l 400 nil nil "…") "\n"))
             (insert "  (nothing)\n"))
+          (when (plist-get r :call-line)
+            (insert "\ntools/call reply, raw (first 4000 characters)\n  "
+                    (truncate-string-to-width (plist-get r :call-line) 4000 nil nil "…")
+                    "\n"))
           (insert "\nstderr (last 40 lines)\n")
           (let ((errs (last (split-string (string-trim (plist-get r :stderr)) "\n" t) 40)))
             (if errs
@@ -1623,7 +1927,7 @@ store to save it in.  The server must be ready."
   (let ((buf (gptel "*GoT*")))
     (with-current-buffer buf
       (setq-local gptel-use-tools t)
-      (setq-local gptel-tools (got--tools))
+      (setq-local gptel-tools (if got-ask-all-mcp-tools (got--all-mcp-tools) (got--tools)))
       (setq-local got--problem problem)
       (setq-local got--anchor anchor)
       (setq-local got--ask-file file)
@@ -1637,7 +1941,8 @@ store to save it in.  The server must be ready."
 ;;;###autoload
 (defun got-ask (problem &optional tool anchor file)
   "Ask gptel to answer PROBLEM using the GoT server's TOOL.
-TOOL defaults to the first entry of `got-tools-list'; with a prefix
+TOOL defaults to the first entry of `got-tools-list' or, when that is
+nil, to the server's first tool; with a prefix
 argument you are asked which one.  The result is saved to the project's
 store; ANCHOR is the id of a stored thought it extends, and FILE
 overrides the store file.  Starts the server on first use and continues
@@ -1645,10 +1950,13 @@ once it is ready."
   (interactive
    (list (read-string "Question or claim: ")
          (and current-prefix-arg
-              (completing-read "Tool: " got-tools-list nil nil))))
+              (completing-read "Tool: "
+                               (or got-tools-list (got--server-tool-names)
+                                   (list got-fallback-tool))
+                               nil nil))))
   (when (string-blank-p problem)
     (user-error "Give a question or claim to reason about"))
-  (let ((tool (or tool (car got-tools-list)))
+  (let ((tool (or tool (got--default-tool)))
         (file (or file (got--store-file))))
     (got--when-ready #'got--tools (lambda () (got--ask problem tool anchor file)))))
 
