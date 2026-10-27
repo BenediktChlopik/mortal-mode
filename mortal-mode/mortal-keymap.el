@@ -559,14 +559,34 @@ the current line first."
 ;;; Mark Region
 ;;; ---------------------------------------------------------------------------
 
-(defun mortal/exchange-point-and-mark ()
-  "Exchange point and mark if active; otherwise reactivate the region."
-  (interactive)
-  (cond
-   (mark-active
-    (exchange-point-and-mark))
-   ((mark t)
-    (activate-mark))))
+(defalias 'mortal/exchange-point-and-mark-or-push
+  (let ((last-point nil)
+        (saved-mark nil))
+    (lambda ()
+      (interactive)
+      (cond
+       (mark-active
+        (exchange-point-and-mark)
+        (setq last-point nil
+              saved-mark nil))
+
+       ((and last-point
+             (= (point) last-point)
+             (markerp saved-mark)
+             (marker-position saved-mark))
+        (set-mark saved-mark)
+        (setq mark-active t
+              deactivate-mark nil
+              last-point nil
+              saved-mark nil))
+
+       (t
+        ;; Capture the most recent existing mark BEFORE pushing.
+        (setq saved-mark
+              (when (mark t)
+                (copy-marker (mark t))))
+        (push-mark (point) nil)
+        (setq last-point (point)))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Helpers
@@ -766,6 +786,7 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
 
  ;; selection commands
  "C-a" #'mortal/temp-select-all-dispatch
- "C-SPC" #'mortal/exchange-point-and-mark)
+ "C-SPC" #'mortal/exchange-point-and-mark-or-push
+ "M-SPC" #'pop-to-mark-command)
 
 (provide 'mortal-keymap)
