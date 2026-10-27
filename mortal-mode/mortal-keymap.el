@@ -559,10 +559,17 @@ the current line first."
 ;;; Mark Region
 ;;; ---------------------------------------------------------------------------
 
+(defvar-local mortal/meaningful-mark-ring nil
+  "Ring of meaningful marks set by `mortal/exchange-point-and-mark-or-push'.")
+
+(defvar mortal/meaningful-mark-ring-max 32
+  "Maximum number of meaningful marks to retain per buffer.")
+
 (defalias 'mortal/exchange-point-and-mark-or-push
   (let ((last-point nil)
         (saved-mark nil))
     (lambda ()
+      "Push a meaningful mark, reactivate its region, or exchange point and mark."
       (interactive)
       (cond
        (mark-active
@@ -581,12 +588,45 @@ the current line first."
               saved-mark nil))
 
        (t
-        ;; Capture the most recent existing mark BEFORE pushing.
+        ;; Remember the latest meaningful mark before pushing.
         (setq saved-mark
-              (when (mark t)
-                (copy-marker (mark t))))
+              (car mortal/meaningful-mark-ring))
+        (setq saved-mark
+              (when saved-mark
+                (copy-marker saved-mark)))
+
+        ;; Add this position to our private, buffer-local ring.
+        (push (copy-marker (point))
+              mortal/meaningful-mark-ring)
+
+        ;; Trim the ring and release discarded markers.
+        (when (> (length mortal/meaningful-mark-ring)
+                 mortal/meaningful-mark-ring-max)
+          (mapc #'set-marker
+                (nthcdr mortal/meaningful-mark-ring-max
+                        mortal/meaningful-mark-ring)
+                (make-list
+                 (length
+                  (nthcdr mortal/meaningful-mark-ring-max
+                          mortal/meaningful-mark-ring))
+                 nil))
+          (setcdr (nthcdr (1- mortal/meaningful-mark-ring-max)
+                          mortal/meaningful-mark-ring)
+                  nil))
+
+        ;; Also push to Emacs's normal mark ring.
         (push-mark (point) nil)
         (setq last-point (point)))))))
+
+(defun mortal/pop-meaningful-mark ()
+  "Jump to the next mark in the buffer-local meaningful mark ring."
+  (interactive)
+  (when mortal/meaningful-mark-ring
+    (let ((mark (car mortal/meaningful-mark-ring)))
+      (setq mortal/meaningful-mark-ring
+            (append (cdr mortal/meaningful-mark-ring)
+                    (list mark)))
+      (goto-char mark))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Helpers
@@ -787,6 +827,6 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  ;; selection commands
  "C-a" #'mortal/temp-select-all-dispatch
  "C-SPC" #'mortal/exchange-point-and-mark-or-push
- "M-SPC" #'pop-to-mark-command)
+ "M-SPC" #'mortal/pop-meaningful-mark)
 
 (provide 'mortal-keymap)
