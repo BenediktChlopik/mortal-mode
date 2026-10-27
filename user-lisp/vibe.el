@@ -65,6 +65,16 @@
      (display-buffer-in-side-window)
      (side . right))))
 
+(use-package macher-agent
+  :vc (:url "https://github.com/elij/macher-agent/")
+  :ensure t
+  :after (gptel macher)
+  :hook (gptel-mode . macher-agent-mode)
+  :config
+  (require 'macher-agent-vfs)      ;; Enable Virtual File System
+  (require 'macher-agent-sandbox)  ;; Enable Programmatic Tool Calling
+  (require 'macher-agent-zero-mem) ;; Enable dual-ledger conversation memory
+  (macher-agent-install))
 
 ;;; ===========================================================================
 ;;; AI Chat: gptel
@@ -74,7 +84,8 @@
 (declare-function gptel-make-openai "gptel-openai")
 (declare-function gptel-get-tool "gptel" (path))
 (declare-function pyscn-gptel-register "pyscn-gptel-register")
-
+(declare-function gptel-make-tool "gptel")
+(declare-function macher-agent-install "macher-agent")
 
 (use-package gptel
   :demand t
@@ -90,8 +101,10 @@
         '((display-buffer-in-side-window)
           (side . right)
           (slot . 0)
-          (window-width . 0.40)))
+          (window-width . 0.40))
+        gptel-default-mode 'markdown-mode)
 
+  
   ;; Global default tools for all gptel requests.
   (setq gptel-tools
         (delq nil
@@ -126,6 +139,42 @@
           :models '(free))
         gptel-model 'free))
 
+
+(defun vibe/gptel-python-check (file)
+  "Compile-check a Python FILE inside the current project directory."
+  (let* ((root (file-name-as-directory
+                (file-truename default-directory)))
+         (path (expand-file-name file root)))
+    (unless (and (file-regular-p path)
+                 (string-equal (file-name-extension path) "py")
+                 (file-in-directory-p path root))
+      (error "Expected an existing .py file inside the project root"))
+    (with-temp-buffer
+      (let ((status
+             (call-process "python3" nil t nil
+                           "-m" "py_compile" path)))
+        (if (and (integerp status) (zerop status))
+            (format "Python syntax check PASSED: %s" file)
+          (format "Python syntax check FAILED (exit %s):\n%s"
+                  status (buffer-string)))))))
+
+
+(add-to-list
+ 'gptel-tools
+ (gptel-make-tool
+  :name "python_check"
+  :function #'vibe/gptel-python-check
+  :description
+  "Compile-check an existing Python file for syntax errors.
+   Pass a project-relative path such as src/main.py.
+   Returns success or Python compiler diagnostics.
+   Does not execute the Python program."
+  :args
+  (list
+   '(:name "file"
+     :type string
+     :description "Project-relative path to the Python file"))
+  :category "python"))
 
 ;;; ===========================================================================
 ;;; Graph of Thoughts: got

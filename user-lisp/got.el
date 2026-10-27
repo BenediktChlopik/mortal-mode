@@ -123,6 +123,7 @@
 (declare-function gptel-request "gptel")
 (declare-function gptel-make-tool "gptel")
 (declare-function gptel-tool-name "gptel")
+(declare-function gptel-tool-category "gptel")
 (declare-function gptel-get-tool "gptel")
 (declare-function gptel-mcp-connect "gptel-integrations")
 (declare-function mcp-stop-server "mcp")
@@ -164,6 +165,12 @@ Emacs runs it as a child process and talks MCP over its stdin and stdout."
 The Adaptive Graph of Thoughts server answers `initialize' without the
 protocolVersion mcp.el insists on; the shim repairs that reply."
   :type 'boolean)
+
+(defcustom got-last-call-file
+  (expand-file-name "got-shim-last-call.json" temporary-file-directory)
+  "File where `got-shim.py' saves the last tool answer.
+Passed to the shim as GOT_SHIM_DUMP; see `got-last-call'."
+  :type 'file)
 
 (defcustom got-shim-python "python3"
   "Python interpreter that runs `got-shim.py'."
@@ -360,7 +367,11 @@ If it never does, the graph is left running, never blank."
           (cons `(,got-server-name
                   :command ,(car (got--launch))
                   ,@(and (cdr (got--launch)) `(:args ,(cdr (got--launch))))
-                  ,@(and got-server-env `(:env ,(got--env-plist))))
+                  ,@(let ((env (append (and got-use-shim
+                                        `(("GOT_SHIM_DUMP" . ,got-last-call-file)))
+                                   got-server-env)))
+                     (and env `(:env ,(cl-loop for (n . v) in env
+                                               append (list (intern (concat ":" n)) v))))))
                 (cl-remove got-server-name mcp-hub-servers
                            :key #'car :test #'equal)))))
 
@@ -499,6 +510,64 @@ Several waiting operations share one polling timer."
     (unless got--wait-timer
       (setq got--wait-timer (run-at-time 0.5 0.5 #'got--tick)))
     nil))
+
+;;;; Exposing every MCP tool to gptel
+
+(defun got--apply-mcp-tools (global)
+  "Put every connected MCP server's gptel tools into `gptel-tools'.
+In this buffer only, or as the default for all chats when GLOBAL."
+  (let* ((tools (got--all-mcp-tools))
+         (names (mapcar #'gptel-tool-name tools))
+         (merge (lambda (old)
+                  (append (cl-remove-if (lambda (tl) (member (gptel-tool-name tl) names))
+                                        old)
+                          tools))))
+    (if global
+        (setq-default gptel-use-tools t
+                      gptel-tools (funcall merge (default-value 'gptel-tools)))
+      (setq-local gptel-use-tools t
+                  gptel-tools (funcall merge gptel-tools)))
+    (message "got: %d MCP tool(s) from %d server(s) are now gptel tools %s: %s"
+             (length tools)
+             (length (delete-dups (mapcar #'gptel-tool-category tools)))
+             (if global "in every chat" "in this chat")
+             (truncate-string-to-width (string-join names ", ") 200 nil nil "…"))))
+
+;;;###autoload
+(defun got-expose-mcp-tools (&optional global)
+  "Make every tool of every MCP server in `mcp-hub-servers' a gptel tool.
+Connects the servers (the GoT server through its shim) and, once their
+tools are registered, adds them all to `gptel-tools' in the current
+buffer.  With a prefix argument GLOBAL, add them to the default for all
+chats instead.  Servers that fail to start are skipped with a message."
+  (interactive "P")
+  (got--load-backend)
+  (got--register)
+  (let ((buf (current-buffer))
+        (names (mapcar #'car mcp-hub-servers)))
+    (when (and (got--connection) (not (got--connected-p)))
+      (ignore-errors (mcp-stop-server got-server-name)))
+    (message "got: connecting %d MCP server(s) ..." (length names))
+    (setq got--starting t)
+    (gptel-mcp-connect names nil)
+    (got--when-ready
+     #'got--all-mcp-tools
+     (lambda ()
+       (if (buffer-live-p buf)
+           (with-current-buffer buf (got--apply-mcp-tools global))
+         (got--apply-mcp-tools t))))))
+
+;;;###autoload
+(defun got-last-call ()
+  "Show the raw answer the server gave to the last tool call.
+It is saved by `got-shim.py' (so `got-use-shim' must be on) in
+`got-last-call-file'."
+  (interactive)
+  (if (file-readable-p got-last-call-file)
+      (progn (find-file-read-only got-last-call-file)
+             (revert-buffer t t t))
+    (user-error "No saved tool answer at %s (run a tool call first)"
+                got-last-call-file)))
 
 ;;;; Tool listing
 
