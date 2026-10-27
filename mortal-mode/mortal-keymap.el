@@ -558,10 +558,11 @@ the current line first."
 ;;; ---------------------------------------------------------------------------
 ;;; Mark Region
 ;;; ---------------------------------------------------------------------------
-;;; Mark Region
+
+(require 'cl-lib)
 
 (defvar-local mortal/meaningful-mark-ring nil
-  "Ring of meaningful marks.")
+  "Ring of meaningful mark snapshots.")
 
 (add-to-list 'desktop-locals-to-save 'mortal/meaningful-mark-ring)
 
@@ -571,18 +572,30 @@ the current line first."
 (defvar-local mortal/meaningful-mark-ring-last-point nil)
 
 (defun mortal/save-meaningful-mark ()
-  "Save point unless it is already in the ring."
-  (unless (cl-some (lambda (marker)
-                     (and (markerp marker)
-                          (eq (marker-buffer marker) (current-buffer))
-                          (= (marker-position marker) (point))))
-                   mortal/meaningful-mark-ring)
-    (push (copy-marker (point)) mortal/meaningful-mark-ring)
-    (when (> (length mortal/meaningful-mark-ring)
-             mortal/meaningful-mark-ring-max)
-      (set-marker (car (last mortal/meaningful-mark-ring)) nil)
-      (setq mortal/meaningful-mark-ring
-            (butlast mortal/meaningful-mark-ring)))))
+  "Save point and the current window view unless already saved."
+  (let* ((window (selected-window))
+         (point-pos (point))
+         (start-pos (window-start window))
+         (hscroll (window-hscroll window)))
+    (unless (cl-some
+             (lambda (entry)
+               (= (plist-get entry :point) point-pos))
+             mortal/meaningful-mark-ring)
+      (push (list :point point-pos
+                  :start start-pos
+                  :hscroll hscroll)
+            mortal/meaningful-mark-ring)
+      (when (> (length mortal/meaningful-mark-ring)
+               mortal/meaningful-mark-ring-max)
+        (setq mortal/meaningful-mark-ring
+              (butlast mortal/meaningful-mark-ring))))))
+
+(defun mortal--restore-meaningful-mark (entry)
+  "Restore point and window view from mark snapshot ENTRY."
+  (let ((window (selected-window)))
+    (goto-char (plist-get entry :point))
+    (set-window-start window (plist-get entry :start) t)
+    (set-window-hscroll window (plist-get entry :hscroll))))
 
 (defun mortal/exchange-point-and-mark-or-push ()
   "Exchange point and mark, save a mark, or activate the previous mark."
@@ -591,7 +604,7 @@ the current line first."
       (exchange-point-and-mark)
     (if (equal (point) mortal/meaningful-mark-ring-last-point)
         (when (cadr mortal/meaningful-mark-ring)
-          (set-mark (cadr mortal/meaningful-mark-ring))
+          (set-mark (plist-get (cadr mortal/meaningful-mark-ring) :point))
           (activate-mark))
       (mortal/save-meaningful-mark)
       (push-mark (point) nil)
@@ -602,28 +615,24 @@ the current line first."
   (interactive)
   (mortal/save-meaningful-mark)
   (when mortal/meaningful-mark-ring
-    (let ((mark (car mortal/meaningful-mark-ring)))
+    (let ((entry (car mortal/meaningful-mark-ring)))
       (setq mortal/meaningful-mark-ring
-            (append (cdr mortal/meaningful-mark-ring) (list mark)))
-      (goto-char mark))))
+            (append (cdr mortal/meaningful-mark-ring) (list entry)))
+      (mortal--restore-meaningful-mark entry))))
 
 (defun mortal/pop-meaningful-mark-reverse ()
   "Save point if new, then cycle backward through meaningful marks."
   (interactive)
   (mortal/save-meaningful-mark)
   (when mortal/meaningful-mark-ring
-    (let ((mark (car (last mortal/meaningful-mark-ring))))
+    (let ((entry (car (last mortal/meaningful-mark-ring))))
       (setq mortal/meaningful-mark-ring
-            (cons mark (butlast mortal/meaningful-mark-ring)))
-      (goto-char mark))))
+            (cons entry (butlast mortal/meaningful-mark-ring)))
+      (mortal--restore-meaningful-mark entry))))
 
 (defun mortal/clear-meaningful-mark-ring ()
   "Clear the current buffer's meaningful mark ring."
   (interactive)
-  (mapc (lambda (marker)
-          (when (markerp marker)
-            (set-marker marker nil)))
-        mortal/meaningful-mark-ring)
   (setq mortal/meaningful-mark-ring nil
         mortal/meaningful-mark-ring-last-point nil)
   (message "Meaningful mark ring cleared"))
@@ -883,7 +892,7 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  "S-<up>" #'mortal/mark-previous-line
  "S-<down>" #'mortal/mark-next-line
  
- ;; selection commands
+ ;; useful commands
  "C-a" #'mortal/temp-select-all-dispatch
  "C-SPC" #'mortal/exchange-point-and-mark-or-push
  "C-S-SPC" #'mortal/clear-meaningful-mark-ring
