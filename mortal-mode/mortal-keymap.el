@@ -566,57 +566,31 @@ the current line first."
   "Maximum number of meaningful marks to retain per buffer.")
 
 (defalias 'mortal/exchange-point-and-mark-or-push
-  (let ((last-point nil)
-        (saved-mark nil))
+  (let ((last-point nil))
     (lambda ()
-      "Push a meaningful mark, reactivate its region, or exchange point and mark."
+      "Push a meaningful mark if point moved; otherwise activate the region.
+Exchange point and mark when the region is active."
       (interactive)
-      (cond
-       (mark-active
-        (exchange-point-and-mark)
-        (setq last-point nil
-              saved-mark nil))
-
-       ((and last-point
-             (= (point) last-point)
-             (markerp saved-mark)
-             (marker-position saved-mark))
-        (set-mark saved-mark)
-        (setq mark-active t
-              deactivate-mark nil
-              last-point nil
-              saved-mark nil))
-
-       (t
-        ;; Remember the latest meaningful mark before pushing.
-        (setq saved-mark
-              (car mortal/meaningful-mark-ring))
-        (setq saved-mark
-              (when saved-mark
-                (copy-marker saved-mark)))
-
-        ;; Add this position to our private, buffer-local ring.
-        (push (copy-marker (point))
-              mortal/meaningful-mark-ring)
-
-        ;; Trim the ring and release discarded markers.
-        (when (> (length mortal/meaningful-mark-ring)
-                 mortal/meaningful-mark-ring-max)
-          (mapc #'set-marker
-                (nthcdr mortal/meaningful-mark-ring-max
-                        mortal/meaningful-mark-ring)
-                (make-list
-                 (length
-                  (nthcdr mortal/meaningful-mark-ring-max
-                          mortal/meaningful-mark-ring))
-                 nil))
-          (setcdr (nthcdr (1- mortal/meaningful-mark-ring-max)
-                          mortal/meaningful-mark-ring)
-                  nil))
-
-        ;; Also push to Emacs's normal mark ring.
-        (push-mark (point) nil)
-        (setq last-point (point)))))))
+      (if mark-active
+          (exchange-point-and-mark)
+        (if (equal (point) last-point)
+            (when (cadr mortal/meaningful-mark-ring)
+              (set-mark (cadr mortal/meaningful-mark-ring))
+              (activate-mark))
+          (push (copy-marker (point))
+                mortal/meaningful-mark-ring)
+          (when (> (length mortal/meaningful-mark-ring)
+                   mortal/meaningful-mark-ring-max)
+            (let ((discarded
+                   (nthcdr mortal/meaningful-mark-ring-max
+                           mortal/meaningful-mark-ring)))
+              (mapc (lambda (marker) (set-marker marker nil))
+                    discarded)
+              (setcdr (nthcdr (1- mortal/meaningful-mark-ring-max)
+                              mortal/meaningful-mark-ring)
+                      nil)))
+          (push-mark (point) nil)
+          (setq last-point (point)))))))
 
 (defun mortal/pop-meaningful-mark ()
   "Jump to the next mark in the buffer-local meaningful mark ring."
@@ -626,6 +600,15 @@ the current line first."
       (setq mortal/meaningful-mark-ring
             (append (cdr mortal/meaningful-mark-ring)
                     (list mark)))
+      (goto-char mark))))
+
+(defun mortal/pop-meaningful-mark-reverse ()
+  "Jump to the previous mark in the buffer-local meaningful mark ring."
+  (interactive)
+  (when mortal/meaningful-mark-ring
+    (let ((mark (car (last mortal/meaningful-mark-ring))))
+      (setq mortal/meaningful-mark-ring
+            (cons mark (butlast mortal/meaningful-mark-ring)))
       (goto-char mark))))
 
 ;;; ---------------------------------------------------------------------------
@@ -827,6 +810,7 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  ;; selection commands
  "C-a" #'mortal/temp-select-all-dispatch
  "C-SPC" #'mortal/exchange-point-and-mark-or-push
- "M-SPC" #'mortal/pop-meaningful-mark)
+ "M-SPC" #'mortal/pop-meaningful-mark
+ "M-S-SPC" #'mortal/pop-meaningful-mark-reverse)
 
 (provide 'mortal-keymap)
