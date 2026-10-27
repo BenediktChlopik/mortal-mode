@@ -19,8 +19,17 @@
 ;;; Command: M-x vterm
 ;;; ===========================================================================
 
+(declare-function vterm--self-insert "vterm")
+(declare-function vterm-yank "vterm")
+
 (use-package vterm
-  :commands (vterm))
+  :commands (vterm)
+  :init
+  (setq vterm-keymap-exceptions '("C-c"))
+  :config
+  (define-key vterm-mode-map (kbd "C-c") #'vterm--self-insert)
+  (define-key vterm-mode-map (kbd "C-v") #'vterm-yank)
+  (define-key vterm-mode-map (kbd "C-S-v") #'vterm-yank))
 
 (add-to-list
  'display-buffer-alist

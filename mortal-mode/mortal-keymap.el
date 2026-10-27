@@ -815,7 +815,13 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  "<down>"      #'mortal/deselect-next-line
  "<backspace>" #'mortal/backward-delete-whitespace
  "d"           #'self-insert-command ; somehow needed
- "<delete>"    #'mortal/forward-delete-whitespace)
+ "<delete>"    #'mortal/forward-delete-whitespace
+ ;; for vterm
+ "C-c"         #'mortal/copy-line-or-region
+ "C-v"         #'mortal/yank-plain
+ "C-l"         #'undefined
+ "C-d"         #'undefined
+ )
 
 (mortal/add-keys
  ;; quitting
@@ -867,8 +873,7 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  
  ;; clipboard
  "C-x" #'mortal/kill-line-or-region
- "C-c" #'mortal/copy-line-or-region
- "C-v" #'mortal/yank-plain
+ "C-S-c" #'mortal/copy-line-or-region
 
  ;; file actions
  "C-s" #'save-buffer
