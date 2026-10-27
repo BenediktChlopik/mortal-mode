@@ -62,9 +62,20 @@ If a region is active, move all marked lines down instead."
           (setq deactivate-mark nil))))))
 
 (defun mortal/delete-line ()
-  "Delete the current line, including its trailing newline."
+  "Delete whole lines covered by the active region, or the current line."
   (interactive)
-  (delete-region (line-beginning-position) (1+ (line-end-position))))
+  (if (use-region-p)
+      (delete-region
+       (save-excursion
+         (goto-char (region-beginning))
+         (line-beginning-position))
+       (save-excursion
+         (goto-char (region-end))
+         (if (= (region-end) (line-beginning-position))
+             (point)
+           (line-beginning-position 2))))
+    (delete-region (line-beginning-position)
+                   (line-beginning-position 2))))
 
 (defun mortal/insert-line-below ()
   "Insert a new line below the current line and move point there."
