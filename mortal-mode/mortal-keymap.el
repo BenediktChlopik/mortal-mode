@@ -567,6 +567,20 @@ the current line first."
     (insert text)))
 
 ;;; ---------------------------------------------------------------------------
+;;; Completion
+;;; ---------------------------------------------------------------------------
+
+(defun mortal/completion-preview-or-next-candidate ()
+  "Show a completion preview if none is active; otherwise cycle candidates."
+  (interactive)
+  (completion-preview--inhibit-update)
+  (if completion-preview-active-mode
+      (completion-preview-next-candidate 1)
+    (unless completion-preview-mode
+      (completion-preview-mode 1))
+    (completion-preview--show)))
+
+;;; ---------------------------------------------------------------------------
 ;;; Mark Region
 ;;; ---------------------------------------------------------------------------
 
@@ -837,9 +851,9 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  "C-<tab>" #'mortal/indent-line-or-region
 
  ;; completion cycling
- "M-TAB" #'completion-preview-next-candidate
+ "M-TAB" #'mortal/completion-preview-or-next-candidate
  "M-<iso-lefttab>" #'completion-preview-prev-candidate
-
+ 
  ;; jumping
  "M-." #'xref-find-definitions
  "M-," #'xref-go-back
