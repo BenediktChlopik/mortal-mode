@@ -628,6 +628,65 @@ the current line first."
         mortal/meaningful-mark-ring-last-point nil)
   (message "Meaningful mark ring cleared"))
 
+
+(defun mortal/next-undo-boundary ()
+  "Move point to the next recorded undo position."
+  (interactive)
+  (let ((pos (point))
+        (positions nil))
+    (dolist (entry buffer-undo-list)
+      (cond
+       ((null entry)
+        nil)
+       ((integer-or-marker-p entry)
+        (push (if (markerp entry)
+                  (marker-position entry)
+                entry)
+              positions))
+       ((and (consp entry)
+             (integer-or-marker-p (cdr entry)))
+        (push (if (markerp (cdr entry))
+                  (marker-position (cdr entry))
+                (cdr entry))
+              positions))))
+    (setq positions
+          (sort (delete-dups positions) #'<))
+    (let ((next (or (car (cl-remove-if-not
+                          (lambda (p) (> p pos))
+                          positions))
+                    (car positions))))
+      (if next
+          (goto-char next)
+        (message "No undo positions found")))))
+
+(defun mortal/previous-undo-boundary ()
+  "Move point to the previous recorded undo position, cycling backward."
+  (interactive)
+  (let ((pos (point))
+        (positions nil))
+    (dolist (entry buffer-undo-list)
+      (cond
+       ((null entry) nil)
+       ((integer-or-marker-p entry)
+        (push (if (markerp entry)
+                  (marker-position entry)
+                entry)
+              positions))
+       ((and (consp entry)
+             (integer-or-marker-p (cdr entry)))
+        (push (if (markerp (cdr entry))
+                  (marker-position (cdr entry))
+                (cdr entry))
+              positions))))
+    (setq positions (sort (delete-dups positions) #'<))
+    (let ((previous (or (car (last (cl-remove-if-not
+                                    (lambda (p) (< p pos))
+                                    positions)))
+                        (car (last positions)))))
+      (if previous
+          (goto-char previous)
+        (message "No undo positions found")))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Helpers
 ;;; ---------------------------------------------------------------------------
@@ -823,12 +882,14 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  "S-<right>" #'mortal/mark-forward-char
  "S-<up>" #'mortal/mark-previous-line
  "S-<down>" #'mortal/mark-next-line
-
+ 
  ;; selection commands
  "C-a" #'mortal/temp-select-all-dispatch
  "C-SPC" #'mortal/exchange-point-and-mark-or-push
  "C-S-SPC" #'mortal/clear-meaningful-mark-ring
  "M-SPC" #'mortal/pop-meaningful-mark
- "M-S-SPC" #'mortal/pop-meaningful-mark-reverse)
-
+ "M-S-SPC" #'mortal/pop-meaningful-mark-reverse
+ "M-C-SPC" #'mortal/next-undo-boundary
+ "M-C-S-SPC" #'mortal/previous-undo-boundary)
+ 
 (provide 'mortal-keymap)
