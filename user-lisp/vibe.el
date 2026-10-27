@@ -94,6 +94,7 @@
   (require 'macher)
   (require 'gptel-continue)
   (require 'pyscn-gptel)
+  (require 'markdown-mode)
   (pyscn-gptel-register)
   
   (setq gptel-include-reasoning nil
@@ -139,6 +140,12 @@
           :models '(free))
         gptel-model 'free))
 
+(defun vibe/gptel-send-buffer-or-region ()
+  "Send the active region, or the entire buffer if no region is active."
+  (interactive)
+  (unless (use-region-p)
+    (goto-char (point-max)))
+  (gptel-send))
 
 (defun vibe/gptel-python-check (file)
   "Compile-check a Python FILE inside the current project directory."
@@ -210,7 +217,8 @@
 (require 'mortal-keymap)
 (mortal/add-keys
  "C-t" #'vterm
- "C-f" #'deadgrep)
+ "C-f" #'deadgrep
+ "<f5>" #'vibe/gptel-send-buffer-or-region)
 
 
 ;;; ===========================================================================
