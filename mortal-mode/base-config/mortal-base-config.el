@@ -87,6 +87,8 @@
 (scroll-bar-mode -1)
 (menu-bar-mode -1)
 
+;;; Undo
+(add-to-list 'desktop-locals-to-save 'buffer-undo-list)
 
 ;;; Cursor
 
@@ -108,7 +110,7 @@
 ;;; Tab line
 
 (setq tab-line-close-button-show nil)
-
+(require 'tab-line-drag)
 
 ;;; Hide minor modes
 

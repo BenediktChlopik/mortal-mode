@@ -62,9 +62,20 @@ If a region is active, move all marked lines down instead."
           (setq deactivate-mark nil))))))
 
 (defun mortal/delete-line ()
-  "Delete the current line, including its trailing newline."
+  "Delete whole lines covered by the active region, or the current line."
   (interactive)
-  (delete-region (line-beginning-position) (1+ (line-end-position))))
+  (if (use-region-p)
+      (delete-region
+       (save-excursion
+         (goto-char (region-beginning))
+         (line-beginning-position))
+       (save-excursion
+         (goto-char (region-end))
+         (if (= (region-end) (line-beginning-position))
+             (point)
+           (line-beginning-position 2))))
+    (delete-region (line-beginning-position)
+                   (line-beginning-position 2))))
 
 (defun mortal/insert-line-below ()
   "Insert a new line below the current line and move point there."
@@ -556,17 +567,101 @@ the current line first."
     (insert text)))
 
 ;;; ---------------------------------------------------------------------------
+;;; Completion
+;;; ---------------------------------------------------------------------------
+
+(defun mortal/completion-preview-or-next-candidate ()
+  "Show a completion preview if none is active; otherwise cycle candidates."
+  (interactive)
+  (completion-preview--inhibit-update)
+  (if completion-preview-active-mode
+      (completion-preview-next-candidate 1)
+    (unless completion-preview-mode
+      (completion-preview-mode 1))
+    (completion-preview--show)))
+
+;;; ---------------------------------------------------------------------------
 ;;; Mark Region
 ;;; ---------------------------------------------------------------------------
 
-(defun mortal/exchange-point-and-mark ()
-  "Exchange point and mark if active; otherwise reactivate the region."
+(require 'cl-lib)
+
+(defvar-local mortal/meaningful-mark-ring nil
+  "Ring of meaningful mark snapshots.")
+
+(add-to-list 'desktop-locals-to-save 'mortal/meaningful-mark-ring)
+
+(defvar mortal/meaningful-mark-ring-max 12
+  "Maximum number of meaningful marks to retain per buffer.")
+
+(defvar-local mortal/meaningful-mark-ring-last-point nil)
+
+(defun mortal/save-meaningful-mark ()
+  "Save point and the current window view unless already saved."
+  (let* ((window (selected-window))
+         (point-pos (point))
+         (start-pos (window-start window))
+         (hscroll (window-hscroll window)))
+    (unless (cl-some
+             (lambda (entry)
+               (= (plist-get entry :point) point-pos))
+             mortal/meaningful-mark-ring)
+      (push (list :point point-pos
+                  :start start-pos
+                  :hscroll hscroll)
+            mortal/meaningful-mark-ring)
+      (when (> (length mortal/meaningful-mark-ring)
+               mortal/meaningful-mark-ring-max)
+        (setq mortal/meaningful-mark-ring
+              (butlast mortal/meaningful-mark-ring))))))
+
+(defun mortal--restore-meaningful-mark (entry)
+  "Restore point and window view from mark snapshot ENTRY."
+  (let ((window (selected-window)))
+    (goto-char (plist-get entry :point))
+    (set-window-start window (plist-get entry :start) t)
+    (set-window-hscroll window (plist-get entry :hscroll))))
+
+(defun mortal/exchange-point-and-mark-or-push ()
+  "Exchange point and mark, save a mark, or activate the previous mark."
   (interactive)
-  (cond
-   (mark-active
-    (exchange-point-and-mark))
-   ((mark t)
-    (activate-mark))))
+  (if mark-active
+      (exchange-point-and-mark)
+    (if (equal (point) mortal/meaningful-mark-ring-last-point)
+        (when (cadr mortal/meaningful-mark-ring)
+          (set-mark (plist-get (cadr mortal/meaningful-mark-ring) :point))
+          (activate-mark))
+      (mortal/save-meaningful-mark)
+      (push-mark (point) nil)
+      (setq mortal/meaningful-mark-ring-last-point (point)))))
+
+(defun mortal/pop-meaningful-mark ()
+  "Save point if new, then cycle forward through meaningful marks."
+  (interactive)
+  (mortal/save-meaningful-mark)
+  (when mortal/meaningful-mark-ring
+    (let ((entry (car mortal/meaningful-mark-ring)))
+      (setq mortal/meaningful-mark-ring
+            (append (cdr mortal/meaningful-mark-ring) (list entry)))
+      (mortal--restore-meaningful-mark entry))))
+
+(defun mortal/pop-meaningful-mark-reverse ()
+  "Save point if new, then cycle backward through meaningful marks."
+  (interactive)
+  (mortal/save-meaningful-mark)
+  (when mortal/meaningful-mark-ring
+    (let ((entry (car (last mortal/meaningful-mark-ring))))
+      (setq mortal/meaningful-mark-ring
+            (cons entry (butlast mortal/meaningful-mark-ring)))
+      (mortal--restore-meaningful-mark entry))))
+
+(defun mortal/clear-meaningful-mark-ring ()
+  "Clear the current buffer's meaningful mark ring."
+  (interactive)
+  (setq mortal/meaningful-mark-ring nil
+        mortal/meaningful-mark-ring-last-point nil)
+  (message "Meaningful mark ring cleared"))
+
 
 ;;; ---------------------------------------------------------------------------
 ;;; Helpers
@@ -676,7 +771,11 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  "<down>"      #'mortal/deselect-next-line
  "<backspace>" #'mortal/backward-delete-whitespace
  "d"           #'self-insert-command ; somehow needed
- "<delete>"    #'mortal/forward-delete-whitespace)
+ "<delete>"    #'mortal/forward-delete-whitespace
+ ;; for vterm
+ "C-l"         #'undefined
+ "C-d"         #'undefined
+ )
 
 (mortal/add-keys
  ;; quitting
@@ -692,9 +791,9 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  "C-<tab>" #'mortal/indent-line-or-region
 
  ;; completion cycling
- "M-TAB" #'completion-preview-next-candidate
+ "M-TAB" #'mortal/completion-preview-or-next-candidate
  "M-<iso-lefttab>" #'completion-preview-prev-candidate
-
+ 
  ;; jumping
  "M-." #'xref-find-definitions
  "M-," #'xref-go-back
@@ -727,9 +826,10 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  "C-k" #'mortal/delete-line
  
  ;; clipboard
+ "C-c"         #'mortal/copy-line-or-region
+ "C-v"         #'mortal/yank-plain
  "C-x" #'mortal/kill-line-or-region
- "C-c" #'mortal/copy-line-or-region
- "C-v" #'mortal/yank-plain
+ "C-S-c" #'mortal/copy-line-or-region
 
  ;; file actions
  "C-s" #'save-buffer
@@ -763,9 +863,13 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  "S-<right>" #'mortal/mark-forward-char
  "S-<up>" #'mortal/mark-previous-line
  "S-<down>" #'mortal/mark-next-line
-
- ;; selection commands
+ 
+ ;; useful commands
  "C-a" #'mortal/temp-select-all-dispatch
- "C-SPC" #'mortal/exchange-point-and-mark)
+ "C-SPC" #'mortal/exchange-point-and-mark-or-push
+ "C-S-SPC" #'mortal/clear-meaningful-mark-ring
+ "M-SPC" #'mortal/pop-meaningful-mark
+ "M-S-SPC" #'mortal/pop-meaningful-mark-reverse)
+ 
 
 (provide 'mortal-keymap)
