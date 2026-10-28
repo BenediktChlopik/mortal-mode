@@ -871,4 +871,5 @@ use dynamic fallback bindings for all subsequent KEY DEF pairs."
  "M-SPC" #'mortal/pop-meaningful-mark
  "M-S-SPC" #'mortal/pop-meaningful-mark-reverse)
  
+
 (provide 'mortal-keymap)
