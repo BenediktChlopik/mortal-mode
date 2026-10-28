@@ -102,6 +102,11 @@
 (global-hl-line-mode 1)
 
 
+;;; write custom vars in a different file
+
+(setq custom-file (locate-user-emacs-file "custom.el"))
+(load custom-file 'noerror)
+
 ;;; Line numbers
 
 (add-hook 'prog-mode-hook #'display-line-numbers-mode)
