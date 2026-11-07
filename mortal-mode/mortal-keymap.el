@@ -589,7 +589,8 @@ the current line first."
 (defvar-local mortal/meaningful-mark-ring nil
   "Ring of meaningful mark snapshots.")
 
-(add-to-list 'desktop-locals-to-save 'mortal/meaningful-mark-ring)
+(with-eval-after-load 'desktop
+  (add-to-list 'desktop-locals-to-save 'mortal/meaningful-mark-ring))
 
 (defvar mortal/meaningful-mark-ring-max 12
   "Maximum number of meaningful marks to retain per buffer.")
