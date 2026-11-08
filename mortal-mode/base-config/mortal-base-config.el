@@ -404,6 +404,22 @@ right buffer even when the names came out differently."
         (delq nil (mapcar (lambda (k) (mortal/key-buffer k t)) keys)))))
    'no-mini))
 
+;;;; Transient windows
+
+(defconst mortal/transient-buffer-regexp
+  "\\`\\*\\(Warnings\\|Compile-Log\\|Completions\\|Backtrace\\)\\*\\'"
+  "Buffers that pop up on their own and don't belong in a saved layout.")
+
+(defun mortal/drop-transient-windows ()
+  "Close windows showing startup/popup buffers, keeping at least one window."
+  (dolist (w (window-list nil 'no-mini))
+    (when (and (window-live-p w)
+               (not (window-parameter w 'window-side))
+               (string-match-p mortal/transient-buffer-regexp
+                               (buffer-name (window-buffer w)))
+               (window-deletable-p w))
+      (delete-window w))))
+
 ;;;; Save
 
 (defun mortal/layout-saveable-p ()
@@ -468,6 +484,7 @@ right buffer even when the names came out differently."
                             (lambda () (mapc #'mortal/restore-side-window
                                              (plist-get data :sides)))
                             #'mortal/restore-tabs
+                            #'mortal/drop-transient-windows
                             (lambda () (when (plist-get data :speedbar)
                                          (speedbar-window-mode 1)))))
           (unless (mortal/logged (funcall step))
@@ -499,7 +516,9 @@ right buffer even when the names came out differently."
                             (frame-list))))
     (mortal/layout-restore)))
 
-(add-hook 'kill-emacs-hook #'mortal/layout-save)
+;; Depth -90: run before `desktop-kill' and others, so an error in one of
+;; them can't stop the layout from being saved.
+(add-hook 'kill-emacs-hook #'mortal/layout-save -90)
 (add-hook 'delete-frame-functions #'mortal/layout-save-on-delete-frame)
 (add-hook 'window-configuration-change-hook #'mortal/layout-schedule-save)
 (add-hook 'window-size-change-functions #'mortal/frame-note-geometry)
