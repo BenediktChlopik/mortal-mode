@@ -220,28 +220,55 @@
 ;;; ---------------------------------------------------------------------------
 ;;; Layout persistence (frame, windows, side windows, tabs)
 ;;; ---------------------------------------------------------------------------
+;;
+;; The layout is written to `mortal/layout-file' shortly after every change
+;; (and on exit), not only when Emacs quits cleanly, so a crash, a kill or a
+;; logout doesn't lose it.  On startup it is restored after Desktop has
+;; brought the file buffers back.  Buffers are matched by file name, not by
+;; buffer name, and are re-opened if Desktop didn't restore them.
 
 (defvar mortal/layout-file (expand-file-name "layout.eld" user-emacs-directory))
 
 (defvar mortal/layout-ready nil
-  "Non-nil once the layout has been restored.  Saving is skipped before that,
-so a failed restore can't overwrite the last good layout.")
+  "Non-nil once the layout has been restored (or there was nothing to restore).
+Saving is skipped before that, so startup can't overwrite the last layout.")
 
-(defconst mortal/frame-params '(left top width height fullscreen))
+(defvar mortal/layout-restoring nil
+  "Non-nil while the layout is being restored; saving is suspended.")
+
+(defvar mortal/layout-save-timer nil)
+
+(defvar mortal/layout-normal-frame nil
+  "Last left/top/width/height seen while the frame was not maximized or
+fullscreen.  A maximized frame reports its maximized size, which is useless
+for getting back to the un-maximized geometry.")
+
+(defconst mortal/frame-geometry-params '(left top width height))
 
 (add-to-list 'window-persistent-parameters '(mortal-tabs . writable))
 
 (defmacro mortal/logged (&rest body)
-  "Run BODY; report errors in *Messages* instead of hiding them."
-  `(condition-case err (progn ,@body)
-     (error (message "mortal layout: %S" err))))
+  "Run BODY; report errors in *Messages* instead of hiding them.
+Return non-nil if BODY ran without error."
+  `(condition-case err (progn ,@body t)
+     (error (message "mortal layout: %S" err) nil)))
 
 ;; Buffers can't be written to disk, so they are stored as file names/buffer names.
 (defun mortal/buffer-key (buf)
   (or (buffer-file-name buf) (buffer-name buf)))
 
-(defun mortal/key-buffer (key)
-  (or (find-buffer-visiting key) (get-buffer key)))
+(defun mortal/key-buffer (key &optional open)
+  "Return the live buffer for KEY (a file name or a buffer name).
+With OPEN, visit KEY if it is a readable local file that isn't open yet."
+  (or (find-buffer-visiting key)
+      (get-buffer key)
+      (and open
+           (stringp key)
+           (file-name-absolute-p key)
+           (not (file-remote-p key))
+           (file-readable-p key)
+           (not (file-directory-p key))
+           (find-file-noselect key))))
 
 (defun mortal/speedbar-open-p ()
   (and (boundp 'speedbar-buffer)
@@ -270,23 +297,97 @@ so a failed restore can't overwrite the last good layout.")
                       :key (mortal/buffer-key (window-buffer w)))
                 specs))))))
 
-(defun mortal/layout-save ()
-  (when mortal/layout-ready
-    (mortal/logged
-     (walk-windows (lambda (w)
-                     (set-window-parameter w 'mortal-tabs (mortal/window-tab-keys w)))
-                   'no-mini)
-     (with-temp-file mortal/layout-file
-       (let ((print-length nil) (print-level nil))
-         (prin1 (list :frame (seq-filter (lambda (p) (memq (car p) mortal/frame-params))
-                                         (frame-parameters))
-                      :speedbar (mortal/speedbar-open-p)
-                      :sides (mortal/side-window-specs)
-                      :main (window-state-get (window-main-window) t))
-                (current-buffer)))))))
+(defun mortal/file-buffer-names ()
+  "Alist (BUFFER-NAME . FILE) of all file buffers.
+`window-state-get' only records buffer names; this lets the restore find the
+right buffer even when the names came out differently."
+  (delq nil (mapcar (lambda (b)
+                      (when-let* ((f (buffer-file-name b)))
+                        (cons (buffer-name b) f)))
+                    (buffer-list))))
+
+;;;; Frame
+
+(defun mortal/frame-usable-p (&optional frame)
+  "Non-nil if FRAME is a normal graphical frame whose geometry we manage."
+  (let ((f (or frame (selected-frame))))
+    (and (frame-live-p f)
+         (display-graphic-p f)
+         (not (frame-parameter f 'parent-frame)))))
+
+(defun mortal/frame-note-geometry (&rest _)
+  "Remember the selected frame's geometry while it is in its normal state."
+  (when (and (mortal/frame-usable-p)
+             (not (frame-parameter nil 'fullscreen)))
+    (setq mortal/layout-normal-frame
+          (mapcar (lambda (p) (cons p (frame-parameter nil p)))
+                  mortal/frame-geometry-params))))
+
+(defun mortal/position-on-screen-p (left top)
+  "Non-nil if LEFT/TOP is a position that lies on one of the monitors."
+  (and (integerp left) (integerp top)
+       (seq-some (lambda (m)
+                   (pcase (alist-get 'geometry m)
+                     (`(,x ,y ,w ,h)
+                      (and (>= left (- x 100)) (< left (+ x w -100))
+                           (>= top (- y 50)) (< top (+ y h -50))))))
+                 (display-monitor-attributes-list))))
+
+(defun mortal/frame-state ()
+  (when (mortal/frame-usable-p)
+    (mortal/frame-note-geometry)
+    (list :frame mortal/layout-normal-frame
+          :fullscreen (frame-parameter nil 'fullscreen))))
+
+(defun mortal/restore-frame (data)
+  (when (mortal/frame-usable-p)
+    (let* ((saved (plist-get data :frame))
+           (geom (seq-filter (lambda (p) (memq (car p) mortal/frame-geometry-params))
+                             saved))
+           ;; Older layout files kept `fullscreen' inside :frame.
+           (fullscreen (if (plist-member data :fullscreen)
+                           (plist-get data :fullscreen)
+                         (cdr (assq 'fullscreen saved)))))
+      ;; A monitor may have gone away since the layout was saved.
+      (unless (mortal/position-on-screen-p (alist-get 'left geom) (alist-get 'top geom))
+        (setq geom (seq-remove (lambda (p) (memq (car p) '(left top))) geom)))
+      ;; Geometry first, then maximize, so un-maximizing later returns to it.
+      (when geom (modify-frame-parameters nil geom))
+      (modify-frame-parameters nil `((fullscreen . ,fullscreen)))
+      (setq mortal/layout-normal-frame geom))))
+
+;;;; Windows
+
+(defun mortal/map-state-buffers (fn state)
+  "Return window STATE with every buffer name N replaced by (funcall FN N)."
+  (cond
+   ((and (consp state) (eq (car state) 'buffer) (stringp (cadr state)))
+    (cons 'buffer (cons (funcall fn (cadr state)) (cddr state))))
+   ((and (consp state) (memq (car state) '(prev-buffers next-buffers))
+         (listp (cdr state)))
+    (cons (car state)
+          (mapcar (lambda (e)
+                    (if (and (consp e) (stringp (car e)))
+                        (cons (funcall fn (car e)) (cdr e))
+                      e))
+                  (cdr state))))
+   ((consp state)
+    (cons (mortal/map-state-buffers fn (car state))
+          (mortal/map-state-buffers fn (cdr state))))
+   (t state)))
+
+(defun mortal/restore-windows (data)
+  (let* ((names (plist-get data :names))
+         (state (mortal/map-state-buffers
+                 (lambda (name)
+                   (let* ((file (cdr (assoc name names)))
+                          (buf (and file (mortal/key-buffer file t))))
+                     (if buf (buffer-name buf) name)))
+                 (plist-get data :main))))
+    (window-state-put state (window-main-window) 'safe)))
 
 (defun mortal/restore-side-window (spec)
-  (when-let* ((buf (mortal/key-buffer (plist-get spec :key))))
+  (when-let* ((buf (mortal/key-buffer (plist-get spec :key) t)))
     (let ((side (plist-get spec :side))
           (size (plist-get spec :size)))
       (display-buffer-in-side-window
@@ -299,30 +400,116 @@ so a failed restore can't overwrite the last good layout.")
    (lambda (w)
      (when-let* ((keys (window-parameter w 'mortal-tabs)))
        (set-window-parameter
-        w 'tab-line-buffers (delq nil (mapcar #'mortal/key-buffer keys)))))
+        w 'tab-line-buffers
+        (delq nil (mapcar (lambda (k) (mortal/key-buffer k t)) keys)))))
    'no-mini))
 
+;;;; Save
+
+(defun mortal/layout-saveable-p ()
+  (and mortal/layout-ready
+       (not mortal/layout-restoring)
+       ;; Don't save the daemon's own invisible frame, or a child frame.
+       (not (and (daemonp) (not (frame-parameter nil 'client))))
+       (not (frame-parameter nil 'parent-frame))))
+
+(defun mortal/layout-save ()
+  "Write the current frame/window/tab layout to `mortal/layout-file'."
+  (interactive)
+  (when (mortal/layout-saveable-p)
+    (mortal/logged
+     (walk-windows (lambda (w)
+                     (set-window-parameter w 'mortal-tabs (mortal/window-tab-keys w)))
+                   'no-mini)
+     (let ((tmp (concat mortal/layout-file ".tmp")))
+       ;; Write to a temp file and rename, so being killed mid-write can't
+       ;; leave a truncated layout behind.
+       (with-temp-file tmp
+         (let ((print-length nil) (print-level nil))
+           (prin1 (append (mortal/frame-state)
+                          (list :speedbar (mortal/speedbar-open-p)
+                                :sides (mortal/side-window-specs)
+                                :names (mortal/file-buffer-names)
+                                :main (window-state-get (window-main-window) t)))
+                  (current-buffer))))
+       (rename-file tmp mortal/layout-file t)))))
+
+(defun mortal/layout-schedule-save (&rest _)
+  "Save the layout once Emacs has been idle for a moment."
+  (when (and mortal/layout-ready (not mortal/layout-restoring))
+    (when (timerp mortal/layout-save-timer)
+      (cancel-timer mortal/layout-save-timer))
+    (setq mortal/layout-save-timer
+          (run-with-idle-timer 2 nil #'mortal/layout-save))))
+
+(defun mortal/layout-save-on-delete-frame (frame)
+  (when (eq frame (selected-frame))
+    (mortal/layout-save)))
+
+;;;; Restore
+
 (defun mortal/layout-restore ()
-  (message "mortal layout: restoring (windows now: %d, file exists: %s)"
-           (length (window-list nil 'no-mini))
-           (file-exists-p mortal/layout-file))
-  (mortal/logged
-   (when (file-exists-p mortal/layout-file)
-     (let ((data (with-temp-buffer
-                   (insert-file-contents mortal/layout-file)
-                   (read (current-buffer)))))
-       (modify-frame-parameters nil (plist-get data :frame))
-       (window-state-put (plist-get data :main) (window-main-window) 'safe)
-       (mapc #'mortal/restore-side-window (plist-get data :sides))
-       (mortal/restore-tabs)
-       (when (plist-get data :speedbar) (speedbar-window-mode 1))
-       (force-mode-line-update t))))
-  (message "mortal layout: restore done (windows now: %d)"
-           (length (window-list nil 'no-mini)))
-  (setq mortal/layout-ready t))
+  "Restore the layout saved in `mortal/layout-file'."
+  (let ((mortal/layout-restoring t)
+        (cli-buffers (seq-filter #'buffer-file-name
+                                 (mapcar #'window-buffer
+                                         (window-list nil 'no-mini))))
+        (failed nil)
+        data)
+    (when (file-exists-p mortal/layout-file)
+      (unless (mortal/logged
+               (setq data (with-temp-buffer
+                            (insert-file-contents mortal/layout-file)
+                            (read (current-buffer)))))
+        (setq failed t))
+      (when data
+        (dolist (step (list (lambda () (mortal/restore-frame data))
+                            (lambda () (mortal/restore-windows data))
+                            (lambda () (mapc #'mortal/restore-side-window
+                                             (plist-get data :sides)))
+                            #'mortal/restore-tabs
+                            (lambda () (when (plist-get data :speedbar)
+                                         (speedbar-window-mode 1)))))
+          (unless (mortal/logged (funcall step))
+            (setq failed t)))
+        ;; A file named on the command line wins over the saved layout.
+        (mortal/logged
+         (when-let* ((buf (car (last cli-buffers))))
+           (unless (get-buffer-window buf t)
+             (when (window-parameter (selected-window) 'window-side)
+               (select-window (window-main-window)))
+             (switch-to-buffer buf))))
+        (force-mode-line-update t))
+      (when failed
+        ;; Keep what we couldn't read/apply for inspection; the next save
+        ;; replaces layout.eld with the current (working) layout.
+        (mortal/logged (copy-file mortal/layout-file
+                                  (concat mortal/layout-file ".bad") t))
+        (message "mortal layout: restore incomplete, old layout kept in %s.bad"
+                 (file-name-nondirectory mortal/layout-file))))
+    (setq mortal/layout-ready t)))
+
+(defun mortal/layout-restore-in-new-daemon-frame ()
+  "Under a daemon, restore the layout when the first graphical frame appears."
+  (when (and (display-graphic-p)
+             (not (seq-some (lambda (f)
+                              (and (not (eq f (selected-frame)))
+                                   (display-graphic-p f)
+                                   (frame-parameter f 'client)))
+                            (frame-list))))
+    (mortal/layout-restore)))
 
 (add-hook 'kill-emacs-hook #'mortal/layout-save)
-(add-hook 'window-setup-hook #'mortal/layout-restore)
+(add-hook 'delete-frame-functions #'mortal/layout-save-on-delete-frame)
+(add-hook 'window-configuration-change-hook #'mortal/layout-schedule-save)
+(add-hook 'window-size-change-functions #'mortal/frame-note-geometry)
+(add-hook 'window-size-change-functions #'mortal/layout-schedule-save)
+(add-hook 'move-frame-functions #'mortal/frame-note-geometry)
+(add-hook 'move-frame-functions #'mortal/layout-schedule-save)
+(if (daemonp)
+    (add-hook 'server-after-make-frame-hook #'mortal/layout-restore-in-new-daemon-frame)
+  (add-hook 'window-setup-hook #'mortal/layout-restore))
+;; Tab order changes don't trigger the hooks above, so also save periodically.
 (run-with-idle-timer 60 t #'mortal/layout-save)
 
 ;;; ---------------------------------------------------------------------------
