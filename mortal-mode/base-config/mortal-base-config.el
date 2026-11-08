@@ -123,7 +123,8 @@
         which-key-mode
         company-mode
         completion-preview-mode
-        hs-minor-mode))
+        hs-minor-mode
+        checkdoc-minor-mode))
 
 
 ;;; ---------------------------------------------------------------------------
@@ -561,6 +562,14 @@ right buffer even when the names came out differently."
 
 (add-hook 'prog-mode-hook #'flymake-mode)
 (add-hook 'prog-mode-hook #'eglot-ensure)
+
+
+;; checkdoc
+
+(require 'checkdoc)
+
+(add-hook 'emacs-lisp-mode-hook
+          #'checkdoc-minor-mode)
 
 
 ;;; ---------------------------------------------------------------------------

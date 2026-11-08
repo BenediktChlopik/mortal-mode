@@ -45,3 +45,17 @@
                               (error-message-string err))
                       :error)))))))
           -90)
+
+
+;; Trust your own Emacs Lisp source directory.
+(with-eval-after-load 'files
+  (add-to-list 'trusted-content
+               (abbreviate-file-name
+                (file-name-as-directory
+                 (expand-file-name "~/.emacs.d/user-lisp/")))))
+(cond
+ ((boundp 'trusted-files)
+  (add-to-list 'trusted-files got-flymake-trusted-directory))
+
+ ((boundp 'trusted-content)
+
