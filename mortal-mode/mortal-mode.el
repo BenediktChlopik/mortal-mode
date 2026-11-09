@@ -121,7 +121,8 @@
 
           (setq speedbar-prefer-window t
                 speedbar-window-default-width 25
-                speedbar-window-max-width 25)
+                speedbar-window-max-width 25
+				speedbar-show-unknown-files t)
 
           ;; Emacs 31.1 mouse fix.
           (unless (advice-member-p #'mortal/speedbar-fix
