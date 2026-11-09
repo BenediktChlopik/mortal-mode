@@ -61,8 +61,6 @@
 
 (setq initial-scratch-message nil)
 
-(winner-mode 1)
-
 
 ;;; ---------------------------------------------------------------------------
 ;;; Theme / appearance
