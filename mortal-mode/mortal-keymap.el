@@ -352,89 +352,125 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
 ;;; ---------------------------------------------------------------------------
 ;;; Indentation
 ;;; ---------------------------------------------------------------------------
+;;; ---- Mortal indent helpers (works with smart-tabs-mode) ----
 
 (defun mortal/current-indent-offset ()
   "Guess the indent width for the current major mode."
   (cond
-   ((and (boundp 'python-indent-offset) (derived-mode-p 'python-mode 'python-ts-mode))
+   ((and (boundp 'python-indent-offset)
+         (derived-mode-p 'python-base-mode 'python-mode))
     python-indent-offset)
-   ((and (boundp 'c-basic-offset) (derived-mode-p 'c-mode 'c++-mode 'java-mode))
+   ((and (boundp 'c-basic-offset)
+         (derived-mode-p 'c-mode 'c++-mode 'java-mode))
     c-basic-offset)
-   ((and (boundp 'c-ts-mode-indent-offset) (derived-mode-p 'c-ts-mode 'c++-ts-mode))
+   ((and (boundp 'c-ts-mode-indent-offset)
+         (derived-mode-p 'c-ts-mode 'c++-ts-mode))
     c-ts-mode-indent-offset)
-   ((and (boundp 'java-ts-mode-indent-offset) (derived-mode-p 'java-ts-mode))
+   ((and (boundp 'java-ts-mode-indent-offset)
+         (derived-mode-p 'java-ts-mode))
     java-ts-mode-indent-offset)
-   ((and (boundp 'js-indent-level) (derived-mode-p 'js-mode 'js-ts-mode 'json-mode))
+   ((and (boundp 'js-indent-level)
+         (derived-mode-p 'js-mode 'js-ts-mode 'json-mode))
     js-indent-level)
-   ((and (boundp 'typescript-indent-level) (derived-mode-p 'typescript-mode))
+   ((and (boundp 'typescript-indent-level)
+         (derived-mode-p 'typescript-mode))
     typescript-indent-level)
-   ((and (boundp 'typescript-ts-mode-indent-offset) (derived-mode-p 'typescript-ts-mode 'tsx-ts-mode))
+   ((and (boundp 'typescript-ts-mode-indent-offset)
+         (derived-mode-p 'typescript-ts-mode 'tsx-ts-mode))
     typescript-ts-mode-indent-offset)
-   ((and (boundp 'json-ts-mode-indent-offset) (derived-mode-p 'json-ts-mode))
+   ((and (boundp 'json-ts-mode-indent-offset)
+         (derived-mode-p 'json-ts-mode))
     json-ts-mode-indent-offset)
-   ((and (boundp 'css-indent-offset) (derived-mode-p 'css-mode))
+   ((and (boundp 'css-indent-offset)
+         (derived-mode-p 'css-mode))
     css-indent-offset)
-   ((and (boundp 'css-ts-mode-indent-offset) (derived-mode-p 'css-ts-mode))
+   ((and (boundp 'css-ts-mode-indent-offset)
+         (derived-mode-p 'css-ts-mode))
     css-ts-mode-indent-offset)
-   ((and (boundp 'rust-indent-offset) (derived-mode-p 'rust-mode))
+   ((and (boundp 'rust-indent-offset)
+         (derived-mode-p 'rust-mode))
     rust-indent-offset)
-   ((and (boundp 'rust-ts-mode-indent-offset) (derived-mode-p 'rust-ts-mode))
+   ((and (boundp 'rust-ts-mode-indent-offset)
+         (derived-mode-p 'rust-ts-mode))
     rust-ts-mode-indent-offset)
-   ((and (boundp 'sh-basic-offset) (derived-mode-p 'sh-mode))
+   ((and (boundp 'sh-basic-offset)
+         (derived-mode-p 'sh-mode))
     sh-basic-offset)
+   ((and (boundp 'ruby-indent-level)
+         (derived-mode-p 'ruby-mode 'ruby-ts-mode))
+    ruby-indent-level)
+   ((and (boundp 'cperl-indent-level)
+         (derived-mode-p 'cperl-mode))
+    cperl-indent-level)
+   ((and (boundp 'nxml-child-indent)
+         (derived-mode-p 'nxml-mode))
+    nxml-child-indent)
    (t tab-width)))
 
-(defun mortal/unindent-line-or-region ()
-  "Decrease indentation of the current line (or region) by one
-indent step, without going past column 0. If a region is active,
-it is expanded to cover whole lines, and stays selected as such."
-  (interactive "*")
+(defun mortal/shift-indent (direction)
+  "Shift the current line or active region by DIRECTION indent steps.
+DIRECTION is 1 (indent) or -1 (unindent).  Lines snap to multiples of
+the indent offset, never go below column 0, and blank lines are skipped.
+An active region is expanded to whole lines and stays selected."
   (let* ((region-p (use-region-p))
-         (beg (if region-p (save-excursion (goto-char (region-beginning)) (line-beginning-position))
+         (offset (max 1 (mortal/current-indent-offset)))
+         (point-at-end (and region-p (= (point) (region-end))))
+         (beg (save-excursion
+                (goto-char (if region-p (region-beginning) (point)))
                 (line-beginning-position)))
-         (end (if region-p (save-excursion (goto-char (region-end)) (line-end-position))
+         (end (save-excursion
+                (goto-char (if region-p (region-end) (point)))
+                ;; Region ending at column 0 should not include that line.
+                (when (and region-p (bolp) (> (point) beg))
+                  (backward-char))
                 (line-end-position)))
-         (offset (mortal/current-indent-offset))
          (end-marker (copy-marker end))
          (deactivate-mark nil))
     (save-excursion
       (goto-char beg)
       (while (< (point) end-marker)
-        (indent-line-to (max 0 (- (current-indentation) offset)))
+        (unless (looking-at-p "[ \t]*$")
+          (let ((cur (current-indentation)))
+            (indent-line-to
+             (if (> direction 0)
+                 (* offset (1+ (/ cur offset)))
+               (* offset (/ (max 0 (1- cur)) offset))))))
         (forward-line 1)))
     (when region-p
-      (goto-char beg)
-      (push-mark end-marker nil t))
+      (if point-at-end
+          (progn (set-mark beg) (goto-char end-marker))
+        (progn (set-mark end-marker) (goto-char beg)))
+      (activate-mark))
     (set-marker end-marker nil)))
 
+(defun mortal/shift-indent-and-align (step)
+  "Shift indentation by STEP, then align the affected text.
+With an active region, align that region; otherwise align the
+section around point."
+  (let* ((use-region (use-region-p))
+         ;; Markers survive the text shifting caused by re-indenting.
+         (beg (and use-region (copy-marker (region-beginning))))
+         (end (and use-region (copy-marker (region-end) t))))
+    (unwind-protect
+        (progn
+          (mortal/shift-indent step)
+          (if use-region
+              (align beg end)
+            (align-current)))
+      (when beg (set-marker beg nil))
+      (when end (set-marker end nil)))))
+
 (defun mortal/indent-line-or-region ()
-  "Increase indentation of the current line (or region) by one
-indent step. If a region is active, expand it to whole lines and
-keep it selected."
+  "Increase indentation of the current line or region by one step,
+then align."
   (interactive "*")
-  (let* ((region-p (use-region-p))
-         (beg (if region-p
-                  (save-excursion
-                    (goto-char (region-beginning))
-                    (line-beginning-position))
-                (line-beginning-position)))
-         (end (if region-p
-                  (save-excursion
-                    (goto-char (region-end))
-                    (line-end-position))
-                (line-end-position)))
-         (offset (mortal/current-indent-offset))
-         (end-marker (copy-marker end))
-         (deactivate-mark nil))
-    (save-excursion
-      (goto-char beg)
-      (while (< (point) end-marker)
-        (indent-line-to (+ (current-indentation) offset))
-        (forward-line 1)))
-    (when region-p
-      (goto-char beg)
-      (push-mark end-marker nil t))
-    (set-marker end-marker nil)))
+  (mortal/shift-indent-and-align 1))
+
+(defun mortal/unindent-line-or-region ()
+  "Decrease indentation of the current line or region by one step,
+then align."
+  (interactive "*")
+  (mortal/shift-indent-and-align -1))
 
 (defun mortal/complete-or-indent ()
   "If a completion-preview ghost text is showing, accept it.

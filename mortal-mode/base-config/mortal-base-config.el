@@ -164,7 +164,7 @@
 ;;; Editing
 ;;; ---------------------------------------------------------------------------
 
-(setq-default indent-tabs-mode nil
+(setq-default indent-tabs-mode t
               tab-width 4)
 
 (show-paren-mode 1)
@@ -570,6 +570,11 @@ right buffer even when the names came out differently."
 
 (add-hook 'emacs-lisp-mode-hook
           #'checkdoc-minor-mode)
+;; Enable Flymake for Emacs Lisp.
+(add-hook 'emacs-lisp-mode-hook #'flymake-mode)
+
+;; Run diagnostics after 0.5 seconds of inactivity.
+(setq flymake-no-changes-timeout 0.5)
 
 
 ;;; ---------------------------------------------------------------------------
