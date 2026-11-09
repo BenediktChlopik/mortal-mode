@@ -27,7 +27,7 @@ If a region is active, move all marked lines up instead."
            (end (save-excursion (goto-char (region-end))
                                 (if (bolp) (point) (line-beginning-position 2))))
            (prev-beg (save-excursion (goto-char beg) (forward-line -1) (point))))
-      (if (= prev-beg beg)
+      (if (										= prev-beg beg)
           (message "Can't move further up")
         (let ((above (buffer-substring prev-beg beg))
               (region (buffer-substring beg end)))
@@ -49,7 +49,7 @@ If a region is active, move all marked lines down instead."
            (end (save-excursion (goto-char (region-end))
                                 (if (bolp) (point) (line-beginning-position 2))))
            (next-end (save-excursion (goto-char end) (forward-line 1) (point))))
-      (if (= next-end end)
+      (if (										= next-end end)
           (message "Can't move further down")
         (let ((region (buffer-substring beg end))
               (below (buffer-substring end next-end)))
@@ -71,7 +71,7 @@ If a region is active, move all marked lines down instead."
          (line-beginning-position))
        (save-excursion
          (goto-char (region-end))
-         (if (= (region-end) (line-beginning-position))
+         (if (									= (region-end) (line-beginning-position))
              (point)
            (line-beginning-position 2))))
     (delete-region (line-beginning-position)
@@ -309,22 +309,22 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
   "Delete region or whitespace after point without using the kill ring."
   (interactive "*")
   (let ((delete-active-region nil))
-    (cond
+	(cond
      ((use-region-p)
       (delete-region (region-beginning) (region-end)))
      ((not (looking-at "[ \t\n]"))
       (delete-char 1 nil))
      (t
       (let (end blank-next)
-        (save-excursion
+		(save-excursion
           (skip-chars-forward " \t")
           (when (eq (char-after) ?\n)
-            (forward-char)
-            (skip-chars-forward " \t")
-            (setq blank-next (eolp)))
+			(forward-char)
+			(skip-chars-forward " \t")
+			(setq blank-next (eolp)))
           (setq end (point)))
-        (delete-region (point) end)
-        (when blank-next
+		(delete-region (point) end)
+		(when blank-next
           (indent-according-to-mode)))))))
 
 (defun mortal/backward-delete-whitespace ()
@@ -341,12 +341,12 @@ Priority mirrors how a real C-g would actually be dispatched by Emacs:
         (save-excursion
           (skip-chars-backward " \t")
           (when (eq (char-before) ?\n)
-            (backward-char)
-            (skip-chars-backward " \t")
-            (setq blank-prev (bolp)))
+			(backward-char)
+			(skip-chars-backward " \t")
+			(setq blank-prev (bolp)))
           (setq start (point)))
-        (delete-region start (point))
-        (when blank-prev
+		(delete-region start (point))
+		(when blank-prev
           (indent-according-to-mode)))))))
 
 ;;; ---------------------------------------------------------------------------
@@ -453,31 +453,112 @@ An active region is expanded to whole lines and stays selected."
   (interactive "*")
   (mortal/shift-indent -1))
 
+(require 'cl-lib)
+
+
+(defconst mortal/assign-re
+  (concat "[^ \t]\\(\\s-+\\)"
+          "\\(?:[-+*/%@&|^]\\|//\\|\\*\\*\\|<<\\|>>\\)?"
+          "=[^=]")
+  "Whitespace before an assignment operator (=, +=, //=, ...).
+The operator must be preceded by whitespace, so (= a b), string=
+and \"=\" inside strings are left alone.  Does not match ==, <=,
+>=, != or :=.")
+
+(defun mortal/--blank-line-p ()
+  (looking-at-p "[ \t]*$"))
+
+(defun mortal/--indent-valid-p ()
+  "Non-nil if the current line's indentation looks plausible.
+It must equal the indentation of an enclosing block above, or be one
+`standard-indent' step deeper than the previous non-blank line."
+  (let ((ind (current-indentation))
+        (valid (= (current-indentation) 0))
+        (min nil))
+    (save-excursion
+      (while (and (not valid) (zerop (forward-line -1)))
+        (unless (mortal/--blank-line-p)
+          (let ((prev (current-indentation)))
+            (when (or (null min) (< prev min))
+              (when (and (null min) (= ind (+ prev standard-indent)))
+                (setq valid t))
+              (when (= ind prev)
+                (setq valid t))
+              (setq min prev))))))
+    (or valid (null min))))
+
+(defvar mortal/strict-indent-modes '(lisp-data-mode scheme-mode)
+  "Modes whose indentation is fully determined by syntax.
+In these modes every line is re-indented by the major mode.  In all
+other modes only lines with an invalid indentation level are changed.")
+
+(defun mortal/--fix-line ()
+  "Re-indent the current line if the mode demands it or it is invalid."
+  (unless (mortal/--blank-line-p)
+    (when (or (apply #'derived-mode-p mortal/strict-indent-modes)
+              (not (mortal/--indent-valid-p)))
+      (indent-according-to-mode))))
+
+(defun mortal/--same-indent-bounds ()
+  "Return (BEG . END) of the lines around point sharing its indentation."
+  (let ((col (current-indentation))
+        (beg (line-beginning-position))
+        (end (line-end-position)))
+    (save-excursion
+      (while (and (zerop (forward-line -1))
+                  (not (mortal/--blank-line-p))
+                  (= (current-indentation) col))
+        (setq beg (point))))
+    (save-excursion
+      (while (and (zerop (forward-line 1))
+                  (not (mortal/--blank-line-p))
+                  (= (current-indentation) col))
+        (setq end (line-end-position))))
+    (cons beg end)))
+
+(defun mortal/--toggle-align (beg end)
+  "Align BEG..END; if that changes nothing, collapse the padding instead."
+  (let ((before (buffer-substring-no-properties beg end)))
+    (align-regexp beg end mortal/assign-re 1 1 nil)
+    (when (string= before (buffer-substring-no-properties beg end))
+      (save-excursion
+        (goto-char beg)
+        (beginning-of-line)
+        (while (< (point) end)
+          (when (re-search-forward mortal/assign-re (line-end-position) t)
+            (replace-match " " t t nil 1))
+          (forward-line 1))))))
+
 (defun mortal/complete-or-indent ()
-  "If a completion-preview ghost text is showing, accept it.
-Otherwise, fix the indentation of the line or region to the level
-the mode considers correct, then align it."
+  "Accept the completion-preview ghost text if one is showing.
+Otherwise fix invalid indentation of the line or region, then toggle
+alignment of assignments: align them, or collapse the padding if they
+are already aligned.  The region is always deactivated afterwards."
   (interactive "*")
-  (cond
-   ;; Ghost text is currently displayed, so accept it.
-   ((bound-and-true-p completion-preview-active-mode)
-    (completion-preview-insert))
-   ;; No ghost text: re-indent to the sensible level, then align.
-   (t
-    (let* ((use-region (use-region-p))
-           ;; Markers survive the text shifting caused by re-indenting.
-           (beg (and use-region (copy-marker (region-beginning))))
-           (end (and use-region (copy-marker (region-end) t))))
-      (unwind-protect
+  (if (bound-and-true-p completion-preview-active-mode)
+      (progn
+        (completion-preview-insert)
+        (deactivate-mark))
+    (let (beg end)
+      (if (use-region-p)
           (progn
-            (if use-region
-                (indent-region beg end)
-              (indent-according-to-mode))
-            (if use-region
-                (align beg end)
-              (align-current)))
-        (when beg (set-marker beg nil))
-        (when end (set-marker end nil)))))))
+            (setq beg (copy-marker (region-beginning))
+                  end (copy-marker (region-end) t))
+			(save-excursion
+			  (goto-char beg)
+			  (beginning-of-line)
+			  (while (< (point) end)
+				(mortal/--fix-line)
+				(forward-line 1))))
+(mortal/--fix-line)
+(let ((bounds (mortal/--same-indent-bounds)))
+    (setq beg (copy-marker (car bounds))
+        end (copy-marker (cdr bounds) t))))
+(unwind-protect
+    (mortal/--toggle-align beg end)
+(set-marker beg nil)
+(set-marker end nil)
+(deactivate-mark)))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Newline handling
@@ -634,7 +715,7 @@ the current line first."
          (hscroll (window-hscroll window)))
     (unless (cl-some
              (lambda (entry)
-               (= (plist-get entry :point) point-pos))
+               (								= (plist-get entry :point) point-pos))
              mortal/meaningful-mark-ring)
       (push (list :point point-pos
                   :start start-pos
@@ -727,7 +808,7 @@ also consider their corresponding ASCII control-key forms."
                        (setq binding
                              (cl-loop
                               for map in (current-active-maps t)
-                              for candidate = (lookup-key map lookup-key)
+                              for candidate		= (lookup-key map lookup-key)
                               when (and (commandp candidate)
                                         (not (eq candidate fn)))
                               return candidate))))
