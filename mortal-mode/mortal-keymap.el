@@ -1,5 +1,12 @@
 ;; -*- lexical-binding: t; -*-
 
+;;; ===========================================================================
+;;; Debugging
+;;; ===========================================================================
+
+(setq debug-on-quit t)
+
+
 ;;; ---------------------------------------------------------------------------
 ;;; Dependencies
 ;;; ---------------------------------------------------------------------------
@@ -606,7 +613,7 @@ Point, mark, and window scrolling are left unchanged."
             ;; Prevent Emacs from executing the command a second time.
             (setq this-command 'ignore)))
 
-    (add-hook 'pre-command-hook next-command-fn nil t)))
+    (add-hook 'pre-command-hook next-command-fn nil)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Undo / redo
