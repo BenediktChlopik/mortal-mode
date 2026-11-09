@@ -443,48 +443,41 @@ An active region is expanded to whole lines and stays selected."
       (activate-mark))
     (set-marker end-marker nil)))
 
-(defun mortal/shift-indent-and-align (step)
-  "Shift indentation by STEP, then align the affected text.
-With an active region, align that region; otherwise align the
-section around point."
-  (let* ((use-region (use-region-p))
-         ;; Markers survive the text shifting caused by re-indenting.
-         (beg (and use-region (copy-marker (region-beginning))))
-         (end (and use-region (copy-marker (region-end) t))))
-    (unwind-protect
-        (progn
-          (mortal/shift-indent step)
-          (if use-region
-              (align beg end)
-            (align-current)))
-      (when beg (set-marker beg nil))
-      (when end (set-marker end nil)))))
-
 (defun mortal/indent-line-or-region ()
-  "Increase indentation of the current line or region by one step,
-then align."
+  "Increase indentation of the current line or region by one step."
   (interactive "*")
-  (mortal/shift-indent-and-align 1))
+  (mortal/shift-indent 1))
 
 (defun mortal/unindent-line-or-region ()
-  "Decrease indentation of the current line or region by one step,
-then align."
+  "Decrease indentation of the current line or region by one step."
   (interactive "*")
-  (mortal/shift-indent-and-align -1))
+  (mortal/shift-indent -1))
 
 (defun mortal/complete-or-indent ()
   "If a completion-preview ghost text is showing, accept it.
-Otherwise, indent."
-  (interactive)
+Otherwise, fix the indentation of the line or region to the level
+the mode considers correct, then align it."
+  (interactive "*")
   (cond
-   ;; Ghost text is currently displayed — accept it.
+   ;; Ghost text is currently displayed, so accept it.
    ((bound-and-true-p completion-preview-active-mode)
     (completion-preview-insert))
-   ;; Nothing to complete — just indent.
+   ;; No ghost text: re-indent to the sensible level, then align.
    (t
-    (indent-for-tab-command))))
-
-
+    (let* ((use-region (use-region-p))
+           ;; Markers survive the text shifting caused by re-indenting.
+           (beg (and use-region (copy-marker (region-beginning))))
+           (end (and use-region (copy-marker (region-end) t))))
+      (unwind-protect
+          (progn
+            (if use-region
+                (indent-region beg end)
+              (indent-according-to-mode))
+            (if use-region
+                (align beg end)
+              (align-current)))
+        (when beg (set-marker beg nil))
+        (when end (set-marker end nil)))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Newline handling
