@@ -559,8 +559,17 @@ right buffer even when the names came out differently."
   :ensure t)
 
 (add-hook 'prog-mode-hook #'flymake-mode)
-(add-hook 'prog-mode-hook #'eglot-ensure)
 
+(with-eval-after-load 'eglot
+  (defun eglot-ensure-if-available ()
+    "Start Eglot only if a server is configured for the current mode."
+    (when (and buffer-file-name
+               (ignore-errors
+                 (nth 3 (eglot--guess-contact))))
+      (eglot-ensure)))
+
+  (add-hook 'after-change-major-mode-hook
+            #'eglot-ensure-if-available))
 
 ;; checkdoc
 
